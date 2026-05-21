@@ -1,0 +1,16 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^\.claude$
+^CLAUDE\.md$
+^01_data_exploration\.R$
+^02_feature_engineering\.R$
+^03_xgboost_model\.R$
+^04_gam_model\.R$
+^05_ensemble_predictions\.R$
+^06_season_predictions\.R$
+^07_brownlow_simulation\.R$
+^models$
+^plots$
+^predictions$
+^results$
+^submissions$

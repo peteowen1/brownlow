@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Rscript:*)",
+      "Bash(find:*)",
+      "Bash(R:*)",
+      "Bash(grep:*)",
+      "Bash(for func in \"apply_match_probability_constraints_legacy\" \"brownlow_model_results\" \"check_variable\" \"objective_function\" \"evaluate_params\")",
+      "Bash(do echo \"Function: $func\")",
+      "Bash(done)",
+      "Bash(for:*)",
+      "Bash(while read file)",
+      "Bash(sort:*)",
+      "Bash(awk:*)",
+      "Bash(cp:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

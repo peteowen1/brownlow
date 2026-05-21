@@ -1,0 +1,18 @@
+# RStudio
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+# Data, models, results & caches — backed up to GitHub Releases via piggyback,
+# NOT committed to git (too large; regenerable by re-running the pipeline).
+data/
+inst/extdata/
+models/
+plots/
+predictions/
+results/
+submissions/
+analysis/submission_comparison/
+*.rds
+*.RData
