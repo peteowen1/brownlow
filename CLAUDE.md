@@ -20,6 +20,8 @@ source("05_xgboost_model.R")             # XGBoost training (~1-2 hours)
 source("06_ensemble_predictions.R")       # Optimal ensemble + final predictions
 source("07_season_predictions.R")         # Season-level + competition submissions
 source("08_brownlow_simulation.R")        # Monte Carlo winner simulations
+source("09_submission_predictions.R")     # Produces the Datathon submission file
+source("10_submission_analysis.R")        # Analyses the Datathon submission
 ```
 
 ## Key Rules
