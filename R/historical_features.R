@@ -310,6 +310,65 @@ calculate_prior_season_performance_averages <- function(stats) {
     )
 }
 
+#' Calculate Last-Season-Only Performance Averages
+#'
+#' `calculate_prior_season_performance_averages()` pools every prior season
+#' together — a player's 10th season and their 1st are weighted identically in
+#' `avg_disposals_per_game_prior`. This is different and complementary: JUST
+#' the immediately preceding season, which a form-based question ("was he good
+#' LAST year") wants and a career-long pool dilutes.
+#'
+#' Includes `coaches_votes` and `brownlow_votes`. That is not a new leakage
+#' risk — `calculate_lagged_career_averages()` already lags `brownlow_votes`
+#' safely elsewhere in this file (`career_avg_brownlow_votes_prior_seasons`),
+#' and the discipline here is identical: `lag(x, n = 1)` at the SEASON level,
+#' before any per-game join, so a player's current season never contributes to
+#' their own last-season figure.
+#'
+#' @param stats DataFrame with player statistics, including `brownlow_votes`
+#' @return `stats` with `last_season_*` columns added
+#' @export
+calculate_last_season_performance <- function(stats) {
+
+  season_summary <- stats %>%
+    dplyr::group_by(player_name, season) %>%
+    dplyr::summarise(
+      season_games           = dplyr::n(),
+      season_coaches_votes   = sum(coaches_votes, na.rm = TRUE),
+      season_brownlow_votes  = sum(brownlow_votes, na.rm = TRUE),
+      season_disposals       = sum(kicks + handballs, na.rm = TRUE),
+      season_goals            = sum(goals, na.rm = TRUE),
+      season_tackles           = sum(tackles, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    dplyr::arrange(player_name, season) %>%
+    dplyr::group_by(player_name) %>%
+    dplyr::mutate(
+      # A single lag(n = 1), not cumsum() - the season immediately before this
+      # one, not every prior season pooled.
+      last_season_games          = dplyr::lag(season_games, n = 1, default = 0),
+      last_season_coaches_votes  = dplyr::lag(season_coaches_votes, n = 1, default = 0),
+      last_season_brownlow_votes = dplyr::lag(season_brownlow_votes, n = 1, default = 0),
+      last_season_disposals      = dplyr::lag(season_disposals, n = 1, default = 0),
+      last_season_goals          = dplyr::lag(season_goals, n = 1, default = 0),
+      last_season_tackles        = dplyr::lag(season_tackles, n = 1, default = 0),
+
+      last_season_coaches_votes_per_game  = dplyr::if_else(
+        last_season_games > 0, last_season_coaches_votes / last_season_games, 0),
+      last_season_brownlow_votes_per_game = dplyr::if_else(
+        last_season_games > 0, last_season_brownlow_votes / last_season_games, 0),
+      last_season_disposals_per_game      = dplyr::if_else(
+        last_season_games > 0, last_season_disposals / last_season_games, 0),
+
+      played_last_season = as.numeric(last_season_games > 0)
+    ) %>%
+    dplyr::ungroup() %>%
+    dplyr::select(player_name, season, dplyr::starts_with("last_season_"), played_last_season)
+
+  stats %>%
+    dplyr::left_join(season_summary, by = c("player_name", "season"))
+}
+
 #' Calculate Lagged Career Averages
 #'
 #' Creates lagged career averages for top performing metrics, excluding current game/season
@@ -509,7 +568,28 @@ create_comprehensive_performance_historical_features <- function(stats) {
     calculate_recent_performance_trends() %>%
     calculate_position_performance_patterns() %>%
     calculate_prior_season_performance_averages() %>%
+    calculate_last_season_performance() %>%
     calculate_lagged_career_averages()  # Add the new lagged career averages
+
+  # A player's first recorded season has no season before it, so every
+  # last_season_* column must be exactly zero for every row in that season —
+  # not just their debut game, every game of it.
+  first_season_rows <- stats_enhanced %>%
+    dplyr::group_by(player_name) %>%
+    dplyr::filter(season == min(season)) %>%
+    dplyr::ungroup()
+  last_season_cols <- grep("^last_season_", names(stats_enhanced), value = TRUE)
+  for (col in last_season_cols) {
+    bad <- sum(!is.na(first_season_rows[[col]]) & first_season_rows[[col]] != 0)
+    if (bad > 0) {
+      stop(sprintf(paste0("%s is non-zero on %d of %d rows in a player's first ",
+                          "recorded season. No season exists before a debut season, ",
+                          "so this must be exactly zero for that whole season."),
+                   col, bad, nrow(first_season_rows)))
+    }
+  }
+  message(sprintf("Last-season check passed: %d columns zero for all %d rows of every player's debut season",
+                  length(last_season_cols), nrow(first_season_rows)))
 
   return(stats_enhanced)
 }
