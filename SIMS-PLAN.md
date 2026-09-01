@@ -125,19 +125,37 @@ players who polled enough to appear on them; the full annual list runs to ~30
 (34 in 2018), mostly players who poll nothing. A player suspended AND polling
 15-20 would not show up here.
 
-**The 3-2-1 sampler under-allocates to favourites.** Steps 2 and 3 of
-`simulate_match_votes()` use ad-hoc marginal sums (`P(2)+P(3)`) rather than a
-conditional. Measured on a real match: the favourite's P(2) comes out 0.135
-against an input marginal of 0.172, a 21% shortfall; top-5 players lose 0.6% of
-expected votes and the field gains 5%. Small per match, but it compounds over 22
-rounds and runs against the favourite.
+**The 3-2-1 sampler: TESTED, keep the existing one.** Steps 2 and 3 of
+`simulate_match_votes()` use `P(2)+P(3)` rather than a conditional, which looked
+like a heuristic bodge worth replacing. It is a bodge, and it is also the best of
+the three options tested. Mean absolute error against the input marginals across
+all 46 players in a real match, 20,000 draws each:
 
-The fix is already written. `R/plackett_luce.R` draws 1st, 2nd and 3rd
-sequentially from one worth vector, verified exact against brute-force
-enumeration to 8.3e-17. Plackett-Luce lost as a *predictor* because it discarded
-the multinomial's separately-fitted heads — but as a *generative model* for
-simulation it is precisely correct, because here we genuinely are drawing three
-places from a field.
+| sampler | P(3) | P(2) | P(1) | total | top-5 E[votes] | field |
+|---|---:|---:|---:|---:|---:|---:|
+| **legacy `P(2)+P(3)`** | 0.00015 | 0.00151 | 0.00402 | **0.00568** | −0.1% | +0.6% |
+| each placing's own marginal | 0.00021 | 0.00422 | 0.00582 | 0.01025 | −2.9% | +22.4% |
+| Plackett-Luce from P(3) worth | 0.00018 | 0.00984 | 0.00859 | 0.01860 | **+7.5%** | **−58.2%** |
+
+Plackett-Luce is 3.3x worse and badly distorts the top-5-versus-field split. The
+reason is the one that sank it as a predictor: a single worth vector forces
+P(2nd) proportional to P(1st), discarding the multinomial's separately fitted
+heads. Karl Amon has P(3 votes) = 0.124 and P(2 votes) = 0.314 — far likelier to
+be second than his best-on-ground worth implies — and PL gives him 0.494.
+
+Why sampling from each placing's own marginal also loses: after the best player
+is removed, the remaining field's chance of taking the 2 votes is NOT their
+unconditional P(2). It is inflated for exactly the players who were competing for
+the 3. `P(2)+P(3)` is a crude correction for that, and empirically a good one.
+
+Residual defect, small: the favourite's P(2) comes out about 14% low (Will Day
+0.1140 against an input 0.1325). Not worth trading a 3x increase in overall
+marginal error to fix.
+
+**This entry previously said the opposite** — that Plackett-Luce was "precisely
+correct as a generative model" and the fix was already written. That was reasoning
+from the structure of the sport rather than from the model's actual outputs, and
+it was asserted twice before being tested.
 
 **Ties.** `win_credit <- 1 / length(winners)` splits credit among tied leaders.
 Right for a "wins outright" market, wrong for "wins or shares". Depends which
