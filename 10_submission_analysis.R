@@ -48,6 +48,11 @@ if (is.null(submission_file)) {
 
 submission_data <- read_csv(submission_file_path, show_col_types = FALSE)
 
+## Season-specific fixture patches ----
+# Rescheduled matches whose round label differs between the results feed and the
+# submission form. Set to NA when there is no such fixture in the target season.
+RESCHEDULED_2025_MATCH_ID <- "20250142410"   # Gold Coast v Essendon, replayed 27 Aug
+
 ## Load actual results ----
 results_data <- read_csv("data/brownlow-results-2025.csv", show_col_types = FALSE)
 
@@ -107,8 +112,16 @@ results_clean <- results_data %>%
       TRUE ~ team
     ),
 
-    # Clean round (handle special case)
-    round_num = ifelse(matchId == '20250142410', 0, as.numeric(rd)),
+    # One 2025 fixture is labelled differently by the two sources: Gold Coast v
+    # Essendon was the Opening Round game postponed by Cyclone Alfred and replayed
+    # on 27 August. The results feed files it as Round 0, the submission form as
+    # Round 24. Without this it collides with the genuine Opening Round and
+    # produces 41 duplicate join keys.
+    #
+    # This is a 2025-specific patch and WILL be wrong for 2026. The join
+    # assertion below is what actually protects against that — it fails loudly
+    # rather than silently mismatching players.
+    round_num = ifelse(matchId == RESCHEDULED_2025_MATCH_ID, 0, as.numeric(rd)),
 
     # Split player name
     first_name = str_extract(playerName, "^\\S+"),
@@ -124,6 +137,20 @@ joined_data <- submission_clean %>%
            "player_team_std" = "team_std",
            "player_name_std" = "playerName")
   )
+
+# A duplicate key MULTIPLIES rows rather than leaving them unmatched, so an
+# NA check cannot see it. This is exactly what the round-label clash above
+# produces if the patch is stale.
+if (nrow(joined_data) != nrow(submission_clean)) {
+  dupes <- results_clean %>%
+    dplyr::count(round_num, team_std, playerName) %>%
+    dplyr::filter(n > 1)
+  stop(sprintf(paste0("Join changed the row count: %d -> %d. ",
+                      "%d duplicate (round, team, player) keys in the results feed - ",
+                      "most likely a rescheduled fixture labelled differently by the ",
+                      "two sources. Check RESCHEDULED_2025_MATCH_ID."),
+               nrow(submission_clean), nrow(joined_data), nrow(dupes)))
+}
 
 # Check join success
 join_success_rate <- mean(!is.na(joined_data$Actual))

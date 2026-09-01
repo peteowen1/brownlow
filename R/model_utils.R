@@ -96,8 +96,12 @@ prepare_modeling_data <- function(features,
 #' @export
 prepare_full_training_data <- function(features,
                                       target_col = "brownlow_votes",
+                                      test_seasons = NULL,
                                       holdout_seasons = c(2025),
                                       remove_zero_votes = FALSE) {
+  # test_seasons was referenced in the body but never declared as a parameter,
+  # so this either errored or silently picked up a global of the same name.
+  # Unused today, which is the only reason it never bit.
 
   # Remove rows with missing target
   modeling_data <- features %>%
