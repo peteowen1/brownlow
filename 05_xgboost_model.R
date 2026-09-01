@@ -263,11 +263,10 @@ all_data <- bind_rows(prepared_data$train, prepared_data$test, prepared_data$hol
 # Generate XGBoost probabilities for all seasons from the PRODUCTION model.
 # xgboost >= 2.1 returns the multi-class matrix already shaped; the old
 # reshape = TRUE argument has been removed.
-xgb_probs <- predict(production_model, as.matrix(all_data[, prepared_data$feature_cols]))
-if (is.null(dim(xgb_probs))) {
-  xgb_probs <- matrix(xgb_probs, ncol = 4, byrow = TRUE)
-}
-stopifnot(nrow(xgb_probs) == nrow(all_data), ncol(xgb_probs) == 4)
+xgb_probs <- as_prob_matrix(
+  predict(production_model, as.matrix(all_data[, prepared_data$feature_cols])),
+  nrow(all_data)
+)
 
 # Apply probability normalization to ensure 6 votes per match
 cat("Normalizing XGBoost probabilities...\n")

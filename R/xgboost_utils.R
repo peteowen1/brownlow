@@ -404,9 +404,11 @@ prepare_xgboost_predictions <- function(final_model = NULL, train_data = NULL, t
     )
     test_pred <- predict(final_model, dtest_matrix)
 
-    # Reshape probability matrices
-    train_pred_matrix <- matrix(train_pred, nrow = nrow(train_data), byrow = TRUE)
-    test_pred_matrix <- matrix(test_pred, nrow = nrow(test_data), byrow = TRUE)
+    # Coerce to n x 4. Do NOT call matrix(..., byrow = TRUE) unconditionally:
+    # xgboost >= 2.1 already returns a matrix, and reshaping it scrambles every
+    # row while leaving the column means intact.
+    train_pred_matrix <- as_prob_matrix(train_pred, nrow(train_data))
+    test_pred_matrix  <- as_prob_matrix(test_pred,  nrow(test_data))
     colnames(train_pred_matrix) <- paste0("Prob_", 0:3, "_votes")
     colnames(test_pred_matrix) <- paste0("Prob_", 0:3, "_votes")
 

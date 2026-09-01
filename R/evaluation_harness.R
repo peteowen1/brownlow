@@ -8,6 +8,35 @@
 # 1st and 4th in the 2025 datathon was 0.011. A single-run comparison of two
 # configs that differ by less than ~0.001 is a coin flip, not a result.
 
+#' Coerce an xgboost Multi-Class Prediction to an n x 4 Probability Matrix
+#'
+#' From xgboost 2.1 `predict()` on a `multi:softprob` model already returns an
+#' n x 4 matrix. Reshaping that with `matrix(pred, nrow = n, byrow = TRUE)` — as
+#' the codebase did in three places — flattens it column-major and refills it
+#' row-wise, which scrambles every row while leaving the column means intact.
+#' Normalisation afterwards then restores healthy-looking column sums, so the
+#' damage is invisible: measured on the 2023-24 test set, `cor(P(3), actual)`
+#' fell from +0.7177 to +0.0001 while `colMeans` still read 0.9348 / 0.0217 /
+#' 0.0217 / 0.0217. That corrupted evaluation is what drove the ensemble
+#' optimiser to give XGBoost the minimum allowed weight.
+#'
+#' @param pred Whatever `predict()` returned
+#' @param n_obs Expected number of rows
+#'
+#' @return An `n_obs` x 4 matrix
+#' @export
+as_prob_matrix <- function(pred, n_obs) {
+  if (is.null(dim(pred))) {
+    # Genuinely flat: xgboost returns class-major order, so byrow = TRUE is right.
+    pred <- matrix(pred, nrow = n_obs, ncol = 4, byrow = TRUE)
+  }
+  if (nrow(pred) != n_obs || ncol(pred) != 4) {
+    stop(sprintf("Expected a %d x 4 probability matrix, got %d x %d.",
+                 n_obs, nrow(pred), ncol(pred)))
+  }
+  pred
+}
+
 #' Attach Known Actual Votes to a Holdout Season
 #'
 #' The datathon dataset ships the prediction season with all votes set to zero.
