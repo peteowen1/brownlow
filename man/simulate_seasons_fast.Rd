@@ -4,7 +4,13 @@
 \alias{simulate_seasons_fast}
 \title{Simulate a Season Many Times}
 \usage{
-simulate_seasons_fast(prepared, n_sims = 2000, seed = 1)
+simulate_seasons_fast(
+  prepared,
+  n_sims = 2000,
+  seed = 1,
+  sampler = c("legacy", "pl"),
+  beta = 1
+)
 }
 \arguments{
 \item{prepared}{Output of `prepare_season_sim()`}
@@ -12,6 +18,12 @@ simulate_seasons_fast(prepared, n_sims = 2000, seed = 1)
 \item{n_sims}{Number of season simulations}
 
 \item{seed}{Base RNG seed}
+
+\item{sampler}{"legacy" for the existing marginal-sum allocation, or "pl" for
+the sequential Plackett-Luce draw. Kept switchable so the two can be scored
+against the same backtest rather than swapped on argument.}
+
+\item{beta}{Sharpness for the Plackett-Luce worth vector; ignored for legacy}
 }
 \value{
 Matrix of season vote totals, one row per unique player, one column
