@@ -138,3 +138,76 @@ cat("  and in-count momentum updating should not be built.\n")
 
 write_csv(results, "analysis/harness/overperformance_persistence.csv")
 cat("\nwritten: analysis/harness/overperformance_persistence.csv\n")
+
+# ---- confound check: does the slope survive removing per-player bias? -------
+# A systematic per-player bias (the model always underrating ruckmen, say) would
+# make a player's front-half residual correlate with his back-half residual
+# through that shared, static bias - not through anything revealed DURING the
+# count. That would not help live betting, since it is knowable before a single
+# vote is read.
+#
+# Isolate it: for each player-season, take their mean per-game residual across
+# every OTHER season in the dataset, then subtract that static bias (scaled by
+# games) from both halves before repeating the regression. If the slope
+# survives, the persistence is genuinely revealed during the count.
+#
+# Note: the bias estimate uses a player's other seasons, PAST AND FUTURE. That
+# is fine for this attribution check - it is not proposed as a live feature,
+# only as a way to test whether the raw signal is explainable by something
+# static - but it is not leak-free enough to reuse as a production input.
+
+cat("\n=== confound check: does persistence survive removing static per-player bias? ===\n")
+
+season_resid <- preds %>%
+  group_by(player_name, season) %>%
+  summarise(season_resid = sum(actual - pred_votes), games = n(), .groups = "drop")
+
+player_bias <- season_resid %>%
+  group_by(player_name) %>%
+  mutate(total_resid = sum(season_resid), total_games = sum(games),
+         loo_bias = (total_resid - season_resid) / pmax(total_games - games, 1)) %>%
+  ungroup() %>%
+  select(player_name, season, loo_bias)
+
+results_adj <- lapply(seasons, function(S) {
+  d <- preds %>% dplyr::filter(season == S) %>%
+    left_join(player_bias %>% dplyr::filter(season == S), by = "player_name") %>%
+    mutate(loo_bias = tidyr::replace_na(loo_bias, 0))
+  if (nrow(d) == 0) return(NULL)
+  max_r <- max(d$round_idx)
+
+  lapply(cutoffs[cutoffs < max_r - 2], function(r) {
+    front <- d %>% dplyr::filter(round_idx <= r) %>%
+      group_by(player_name, loo_bias) %>%
+      summarise(obs = sum(actual), pred = sum(pred_votes), games = n(), .groups = "drop") %>%
+      mutate(over_front_adj = (obs - pred) - loo_bias * games)
+    back <- d %>% dplyr::filter(round_idx > r) %>%
+      group_by(player_name, loo_bias) %>%
+      summarise(obs_b = sum(actual), pred_b = sum(pred_votes), games_b = n(), .groups = "drop") %>%
+      mutate(resid_back_adj = (obs_b - pred_b) - loo_bias * games_b)
+
+    j <- inner_join(front, back, by = "player_name") %>%
+      dplyr::filter(games >= 3, games_b >= 3)
+    if (nrow(j) < 50) return(NULL)
+
+    fit <- lm(resid_back_adj ~ over_front_adj, data = j)
+    tibble(season = S, cutoff = r, n = nrow(j),
+           slope = coef(fit)[2],
+           se    = summary(fit)$coefficients[2, 2],
+           t     = summary(fit)$coefficients[2, 3])
+  }) %>% bind_rows()
+}) %>% bind_rows()
+
+cat(sprintf("  pooled, bias-adjusted   : %d pairs, mean slope %+.4f, se %.4f, t %+.2f\n",
+            nrow(results_adj), mean(results_adj$slope),
+            sd(results_adj$slope) / sqrt(nrow(results_adj)),
+            mean(results_adj$slope) / (sd(results_adj$slope) / sqrt(nrow(results_adj)))))
+cat(sprintf("  pooled, unadjusted (ref): %d pairs, mean slope %+.4f, t %+.2f\n",
+            nrow(results), mean(results$slope),
+            mean(results$slope) / (sd(results$slope) / sqrt(nrow(results)))))
+cat("\n  If the adjusted slope stays |t| > 2, the effect is genuinely revealed\n")
+cat("  during the count. If it collapses toward zero, it was a static bias\n")
+cat("  that could have been corrected before the count started.\n")
+
+write_csv(results_adj, "analysis/harness/overperformance_persistence_adjusted.csv")
+cat("\nwritten: analysis/harness/overperformance_persistence_adjusted.csv\n")
