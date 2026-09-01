@@ -583,7 +583,8 @@ lower.
 ## 5h. Verified end to end
 
 Scored on the submission file the pipeline actually writes, not on a harness
-approximation:
+approximation. **Superseded by §5i** — this was measured before the whole-career
+leak fix; see §5i for the current number (0.35662).
 
 ```
 what shipped in 2025      0.36063
@@ -696,14 +697,51 @@ is small, those numbers are plausibly similarly little-affected, but that is an
 inference from this result, not a direct re-measurement — flagged rather than
 assumed.
 
-Not yet fixed. The correct repair is either lagging
-`calculate_career_performance_summary()` itself (cumulative stats over strictly
-prior games, matching the pattern already used in
-`calculate_lagged_career_averages()`), or extending that function's metric list
-to cover tackles/marks/games-with-goals/etc. so its output overwrites the leaky
-join the same way it already does for disposals and goals. Either requires
-regenerating every downstream artefact — not done here, given the size of the
-job relative to the measured impact.
+**FIXED 2026-09-02.** `calculate_career_performance_summary()` rewritten as a
+row-level `mutate` using `cumsum(lag(x, default = 0)) / career_total_games`,
+the same discipline as `calculate_lagged_career_averages()` — the join is gone
+entirely; the function now returns `stats` row for row rather than a per-player
+summary table. `career_consistency_disposals` needed its own treatment (no
+`cumsd()` in base R or dplyr): computed via the incremental
+sum/sum-of-squares identity, defaulting to 0 until at least 2 prior games exist
+rather than the original formula's `1/(1+NA) = 1`, which claimed perfect
+consistency for a player with zero career games. `first_season` is kept
+un-lagged — which season a player debuted in is fixed the moment they debut and
+never depends on a future game, so it was never leakage.
+
+Verified two ways: hand-checked against a synthetic 4-game career (every value
+exact), and a debut-zero assertion added at the point of construction, which
+passed on the real dataset — `Career performance check passed: 12 columns zero
+on all 1564 debut games`. A full pipeline rerun was required, not just a patch:
+`03`'s GAM formula uses `career_games_with_goals` as a smooth term, fitted on
+the old leaky (large, whole-career) values, so simply patching `02` would have
+left the GAM extrapolating outside its training range against the new
+(properly lagged, smaller) inputs. Reran `02` → `03` → `04` → `05` → `06` →
+`09` in full.
+
+**Fixing (not dropping) the columns improved the result further.** Scored on
+the actual submission file the corrected pipeline writes:
+
+```
+what shipped in 2025      0.36063
+what this pipeline makes  0.35662   (was 0.35734 before this fix)
+improvement                0.00401  (was 0.00329)
+```
+
+Still 2nd of 23 against the model field, now by a clearer margin over
+`consensus` (0.35738). The properly-lagged versions of these signals — a
+player's real (time-aware) tackle and mark rate, career stage — carry genuine
+information that dropping the columns entirely discarded; fixing beat both the
+leaky version and the drop-them-entirely version.
+
+One additional feature was checked and cleared during this investigation:
+`player_career_games`, supplied raw in the datathon CSV itself (not our code),
+flagged by the same debut-zero test at 99.68%. Traced one player's (Patrick
+Cripps) trajectory across his career: it increases by 1 almost every game
+(4 → 5 → 6 → … → 229), a legitimate running count that includes the current
+game — the same convention as `games_this_season`, and not leakage. The
+debut-zero test only applies to features that claim to be strictly prior-only;
+this one doesn't claim that, so a non-zero debut value is correct.
 
 ## 6. Codebase review
 
