@@ -493,6 +493,93 @@ build, and this evidence does not justify it inside the 2026 window.
 `R/plackett_luce.R` is kept — exact, 3.4 s per season, unit-tested against brute
 force — in case it is worth revisiting.
 
+## 5f. Out-of-sample replication on 2024
+
+Everything above was measured on the 2025 holdout, and three candidates had
+their parameters *chosen* on that same holdout: Plackett-Luce beta (5 values
+tried), the PL/IPF blend weight (4 tried), and `player_bias` k (3 tried).
+Selecting and scoring on one season biases those margins upward, which matters
+when the margins are ~0.0001.
+
+`analysis/replicate_on_2024.R` refits on 2015-2023, scores on 2024, and holds
+every parameter FIXED at its 2025-chosen value. Nothing is tuned.
+
+```
+pooled seed sd = 0.00052  -> differences under 0.00104 are not decidable
+
+                          label    rmse         sd       delta       verdict
+  player_bias k=5.81 (rejected) 0.36775 0.00028792  -0.00060  within noise
+  0.25 PL + 0.75 IPF (rejected) 0.36808 0.00052920  -0.00027  within noise
+                  IPF (adopted) 0.36835 0.00045995   0.00000      baseline
+ Plackett-Luce alone (rejected) 0.37049 0.00080114  +0.00214        worse
+        scale-to-6 (old method) 0.37087 0.00036731  +0.00252        worse
+```
+
+| Change | 2025 (params chosen here) | 2024 (params frozen) |
+|---|---:|---:|
+| IPF vs scale-to-6 | +0.00218 | **+0.00252** |
+| Plackett-Luce alone vs IPF | −0.00265 | −0.00214 |
+| PL blend vs IPF | +0.00011 | +0.00027 |
+| `player_bias` standalone | +0.00062 | +0.00060 |
+
+**IPF replicates, slightly larger out of sample.** The adopted change survives the
+scrutiny applied to the rejected ones. Pure Plackett-Luce is confirmed worse on
+both seasons, and the PL blend stays inside the noise band on both.
+
+**Revised verdict on `player_bias`: redundant, not useless.** +0.00062 on 2025 and
++0.00060 on 2024 — same sign, near-identical magnitude, two independent holdouts
+with k frozen. The effect is probably real. It is not adopted because layering it
+on `player_coef` added only 0.00010 at 10 seeds: the GAM's random effect already
+carries that signal. If the GAM is ever retired, `player_bias` is its replacement
+and costs seconds rather than an hour.
+
+Note 2024 is not perfectly independent — 2023 and 2024 were the test seasons, so
+xgboost's hyperparameters saw 2023 in their CV folds. The constraint methods and
+`player_bias` are genuinely untuned on 2024, which is the question at issue.
+
+## 5g. OPEN: hyperparameters were tuned under random k-fold CV
+
+`tune_xgboost_hyperparameters()` in `R/model_utils.R:542` calls `xgb.cv` with
+the time-aware folds **commented out**:
+
+```r
+cv_result <- xgboost::xgb.cv(
+  params = params,
+  data = dtrain_full,
+  # folds = cv_folds,                        <- ignored
+  nrounds = 500,
+  nfold = 5,                                 <- random 5-fold
+  stratified = (model_type == "multinomial"),
+  early_stopping_rounds = 50,
+  ...
+)
+```
+
+`05_xgboost_model.R` builds proper expanding-window folds with
+`create_time_aware_cv()` and passes them in as `cv_folds`; the function drops
+them. So every tuned hyperparameter — including `best_iteration = 355` and the
+reported `best_cv_score = 0.1544` — was selected while training on future
+seasons and validating on past ones. `stratified = TRUE` compounds it by
+splitting a match's three vote-getters across folds.
+
+This contradicts the repo's own rule in `CLAUDE.md`: *"Never randomly shuffle
+time-series data or train on future data."*
+
+**Uncommenting the line does not fix it.** `xgb.cv`'s `folds` argument takes only
+validation indices and trains on everything else; expanding-window CV needs
+training restricted to *prior* seasons. It would also error, since
+`create_time_aware_cv()` returns `list(train=, validation=)` per fold rather than
+bare index vectors. Honest tuning needs a manual walk-forward loop: `xgb.train`
+on prior seasons, watchlist on the next, `early_stopping_rounds` per fold.
+
+Not fixed here — it is a rewrite of the tuning function, and pre-existing rather
+than introduced by this work. Cost to redo properly: ~250 fits, 6-7 hours,
+feasible overnight. Size it first: the wins this session all came from plumbing,
+and depth-3/eta-0.05 may well be a sensible config regardless of how it was
+found. Note also that 355 rounds was chosen on 68k training rows and the
+production model now trains on 87k, so the honest number may be *higher*, not
+lower.
+
 ## 6. Codebase review
 
 28 files, 13,842 lines in `R/`, 173 exported functions.

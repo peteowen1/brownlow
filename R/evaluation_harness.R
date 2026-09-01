@@ -209,7 +209,11 @@ compare_configs <- function(results, baseline_label = NULL) {
 
   cat(sprintf("\npooled seed sd = %.5f  -> differences under %.5f are not decidable\n\n",
               pooled_sd, 2 * pooled_sd))
-  print(as.data.frame(out %>% dplyr::select(label, normalizer, rmse, sd, delta, verdict)),
+  # any_of, not a bare select: a caller that assembled `results` without the
+  # optional `normalizer` column should still get its table printed rather than
+  # lose an expensive run to a tidyselect error at the very last step.
+  print(as.data.frame(out %>% dplyr::select(dplyr::any_of(
+          c("label", "normalizer", "rmse", "sd", "delta", "verdict")))),
         digits = 5, row.names = FALSE)
   invisible(out)
 }

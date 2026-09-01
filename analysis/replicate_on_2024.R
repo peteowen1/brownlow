@@ -54,7 +54,7 @@ base_probs <- lapply(seq_len(N_SEEDS), function(s) base_fit(train, holdout, s))
 
 score <- function(f, label) {
   vals <- vapply(base_probs, function(pm) rmse(f(pm)), numeric(1))
-  tibble(label = label, rmse = mean(vals), sd = sd(vals),
+  tibble(label = label, normalizer = NA_character_, rmse = mean(vals), sd = sd(vals),
          min = min(vals), max = max(vals), n_seeds = length(vals))
 }
 
@@ -110,10 +110,10 @@ results <- bind_rows(results,
   evaluate_seeds(xgb_fit_predict(c(feats, "player_bias", "player_prior_games"),
                                  target, tuning$best_params, tuning$best_iteration),
                  train_b, holdout_b, sprintf("player_bias k=%.2f (rejected)", BIAS_K),
-                 seeds = seq_len(N_SEEDS), normalizer = "ipf") %>%
-    select(label, rmse, sd, min, max, n_seeds)
+                 seeds = seq_len(N_SEEDS), normalizer = "ipf")
 )
 
+saveRDS(results, "analysis/harness/replication_2024_raw.rds")
 comparison <- compare_configs(results, baseline_label = "IPF (adopted)")
 write_csv(comparison, "analysis/harness/replication_2024.csv")
 cat("\nwritten: analysis/harness/replication_2024.csv\n")
