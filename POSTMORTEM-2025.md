@@ -632,6 +632,79 @@ floor partly because the effect it targets may not be recoverable from this
 dataset at all. Further gains need different inputs, not more transforms of
 these ones.
 
+## 5i. A pre-existing whole-career leak, found 2026-09-02, affecting every
+##     measurement in this document that used walk-forward folds
+
+`calculate_career_performance_summary()` (`R/historical_features.R:12-30`)
+computes eight features as one number per player across their **entire recorded
+career** — `group_by(player_name) %>% summarise(mean(...), max(...), sum(...))`
+— then left-joins that single number onto every row for that player, including
+their debut game:
+
+```
+career_total_games, career_avg_tackles, career_avg_marks,
+career_max_disposals, career_max_goals, career_games_with_goals,
+career_games_high_disposals, career_consistency_disposals
+```
+
+Verified: `career_avg_tackles` is non-zero on 1,546 of 1,564 debut games (should
+be exactly zero — no prior game exists to average). A full sweep of all 260
+features against the same debut-zero test found 97 non-zero features, but the
+overwhelming majority are legitimate current-game or current-team-context stats
+(disposals, `team_score`, `match_margin` — of course a debut game has
+disposals). Filtering to features whose name claims to be historical narrows it
+to exactly these eight, each confirmed to be defined in exactly one place and
+never overwritten downstream.
+
+This predates the session and is distinct from the `player_coef` leak (§5g):
+that one was legitimate fit-on-train/apply-to-test contaminated only by reuse
+across walk-forward folds, and was excluded from every backtest built this
+session. These eight were never checked, because the earlier constancy sweep
+only tested `player_coef` and a handful of illustrative comparisons — not the
+full feature set.
+
+**Scope: every walk-forward test built this session inherited this**, because
+each one filters *rows* by season from `enhanced_modeling_data.rds`, whose
+*features* were computed once over the full 2015–2025 history before any split.
+The calibration backtest (§3b), the persistence test, and the in-count update
+value test all had these eight columns available in every fold.
+
+Measured cost on the 2025 holdout, 5 seeds, IPF, tuned round count, same
+production-style split as the shipped model — see
+`analysis/size_career_summary_leak.R`:
+
+```
+pooled seed sd = 0.00050  -> differences under 0.00101 are not decidable
+
+                                 label     rmse         sd       delta   verdict
+                          without them  0.35752  0.00050  -0.00054  within noise
+ with 8 leaky career-summary features   0.35805  0.00051   0.00000  baseline
+```
+
+**Removing the leak does not meaningfully change the headline number.** If
+anything it is a hair better without them. The `0.35734` / "2nd of 22" result in
+§5h does not need retracting — the correctly-lagged versions of these same
+signals (disposals, goals, coaches votes) already carry the real information,
+and these eight columns were adding noise more than signal.
+
+This measurement used the single production-style holdout only (train on
+seasons before 2025, test on 2025 — the same structure as the shipped model). It
+was **not** re-run against the nine-season walk-forward backtests (§3b, the
+persistence test, the in-count update test), each of which had far more folds
+where this leak was live. Given the mechanism is identical and the effect here
+is small, those numbers are plausibly similarly little-affected, but that is an
+inference from this result, not a direct re-measurement — flagged rather than
+assumed.
+
+Not yet fixed. The correct repair is either lagging
+`calculate_career_performance_summary()` itself (cumulative stats over strictly
+prior games, matching the pattern already used in
+`calculate_lagged_career_averages()`), or extending that function's metric list
+to cover tackles/marks/games-with-goals/etc. so its output overwrites the leaky
+join the same way it already does for disposals and goals. Either requires
+regenerating every downstream artefact — not done here, given the size of the
+job relative to the measured impact.
+
 ## 6. Codebase review
 
 28 files, 13,842 lines in `R/`, 173 exported functions.
