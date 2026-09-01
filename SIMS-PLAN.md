@@ -101,8 +101,29 @@ Mechanism built (`R/eligibility.R`, `data/brownlow_ineligible.csv`): a register
 keyed by season, `apply_eligibility()` zeroing and renormalising after
 simulation, and `assert_eligibility_checked()` which refuses to run on a season
 with no entries — an empty register and an unmaintained one look identical, so
-recording "none-checked" has to be a deliberate act. **The register is empty and
-must be populated from an authoritative source before any betting use.**
+recording "none-checked" has to be a deliberate act.
+
+**Populated 2026-09-01** from published sources, contenders only:
+
+| season | ineligible | votes | finished |
+|---|---|---:|---|
+| 2023 | Caleb Serong (Fremantle) | 24 | equal 7th |
+| 2024 | Isaac Heeney (Sydney) | 28 | **equal 4th** |
+| 2025 | none among vote-getters | — | reviewed |
+
+Heeney is the live betting trap — polled equal fourth and could not win.
+
+**A correction worth keeping.** Izak Rankine's four-match ban in 2025 did NOT
+make him ineligible: it was a MISCONDUCT charge, not a reportable offence with an
+on-field complaint. He polled 15. Adelaide's own statement on the day called him
+ineligible and was wrong, and so did the first search result I found. The rule is
+narrower than it looks — *suspended for a reportable on-field offence* is
+ineligible, a misconduct ban is not.
+
+**Scope limit.** These are contenders only. Published leaderboards flag ineligible
+players who polled enough to appear on them; the full annual list runs to ~30
+(34 in 2018), mostly players who poll nothing. A player suspended AND polling
+15-20 would not show up here.
 
 **The 3-2-1 sampler under-allocates to favourites.** Steps 2 and 3 of
 `simulate_match_votes()` use ad-hoc marginal sums (`P(2)+P(3)`) rather than a
