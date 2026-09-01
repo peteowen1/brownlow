@@ -196,18 +196,27 @@ evaluate_seeds <- function(fit_predict, train, holdout, label,
 #' @return Function suitable for `evaluate_seeds()`
 #' @export
 xgb_fit_predict <- function(feature_cols, target_col, params, nrounds) {
+  # The training DMatrix and the prediction matrix are identical across seeds —
+  # only the RNG differs — so build each once and reuse. Converting an 87,288 x
+  # 260 frame is a 181 MB allocation, and doing it per seed was repeating the
+  # single most expensive non-fitting step in every harness run.
+  cache <- new.env(parent = emptyenv())
+
   function(train, newdata, seed) {
+    if (is.null(cache$dtrain) || !identical(cache$train_id, dim(train))) {
+      cache$dtrain   <- xgboost::xgb.DMatrix(as.matrix(train[, feature_cols]),
+                                             label = train[[target_col]])
+      cache$train_id <- dim(train)
+    }
+    if (is.null(cache$newx) || !identical(cache$new_id, dim(newdata))) {
+      cache$newx   <- as.matrix(newdata[, feature_cols])
+      cache$new_id <- dim(newdata)
+    }
+
     set.seed(seed)
-    model <- xgboost::xgb.train(
-      params  = params,
-      data    = xgboost::xgb.DMatrix(as.matrix(train[, feature_cols]),
-                                     label = train[[target_col]]),
-      nrounds = nrounds,
-      verbose = 0
-    )
-    pm <- stats::predict(model, as.matrix(newdata[, feature_cols]))
-    if (is.null(dim(pm))) pm <- matrix(pm, ncol = 4, byrow = TRUE)
-    pm
+    model <- xgboost::xgb.train(params = params, data = cache$dtrain,
+                                nrounds = nrounds, verbose = 0)
+    as_prob_matrix(stats::predict(model, cache$newx), nrow(newdata))
   }
 }
 
