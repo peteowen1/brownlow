@@ -126,18 +126,34 @@ assert_team_names_consistent <- function(data, team_col = "team") {
                  team_col, paste(head(names(data), 20), collapse = ", ")))
   }
   tbl <- unique(as.data.frame(data)[, c("season", team_col)])
-  n_seasons <- length(unique(tbl$season))
-  counts <- table(tbl[[team_col]])
-  offenders <- names(counts)[counts < n_seasons]
+  per_season <- table(tbl$season)
+  n_clubs <- unique(as.integer(per_season))
 
-  if (length(offenders) > 0) {
+  # A club joining or leaving the competition changes how many clubs a season
+  # has; a club being SPELT differently does not. So only treat a name surplus
+  # as a naming fault when every season fielded the same number of clubs.
+  # Without this the check fires on genuine expansion — Gold Coast entered in
+  # 2011 and GWS in 2012 — and tells you to fix a spelling that is correct.
+  if (length(n_clubs) > 1) {
+    message(sprintf(paste0("Club count varies by season (%s). Skipping the naming check: ",
+                           "expansion or withdrawal cannot be told from a rename this way."),
+                    paste(sprintf("%s=%d", names(per_season), as.integer(per_season)),
+                          collapse = ", ")))
+    return(invisible(data))
+  }
+
+  all_names <- unique(tbl[[team_col]])
+  if (length(all_names) > n_clubs) {
+    counts <- table(tbl[[team_col]])
+    offenders <- names(counts)[counts < length(per_season)]
     detail <- vapply(offenders, function(t) {
       sprintf("  %-28s only in: %s", t,
               paste(sort(unique(tbl$season[tbl[[team_col]] == t])), collapse = ", "))
     }, character(1))
-    stop(sprintf(paste0("Team names are not consistent across all %d seasons.\n",
+    stop(sprintf(paste0("Every season fields %d clubs but %d distinct club names appear, ",
+                        "so at least one club is spelt differently in different seasons.\n",
                         "Add the missing spelling to standardize_team_name().\n%s"),
-                 n_seasons, paste(detail, collapse = "\n")))
+                 n_clubs, length(all_names), paste(detail, collapse = "\n")))
   }
   invisible(data)
 }

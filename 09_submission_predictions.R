@@ -78,6 +78,18 @@ submission_with_predictions <- submission_prepared %>%
     by = c("full_player_name", "team_key", "match_date")
   )
 
+# A duplicate key in ensemble_2025 would MULTIPLY a player's row rather than
+# leave it unmatched, so the NA check below cannot see it. IPF then forces the
+# match to total 6 across the inflated field, and every constraint check still
+# passes while the vote mass is redistributed among a player who now appears
+# twice. This is the same duplicate-key hazard that a Round 0 / Round 24
+# labelling clash produced in the 2025 results join.
+if (nrow(submission_with_predictions) != nrow(submission_prepared)) {
+  stop(sprintf(paste0("Join changed the row count: %d -> %d. ",
+                      "ensemble_probabilities has duplicate (player, team, date) keys."),
+               nrow(submission_prepared), nrow(submission_with_predictions)))
+}
+
 n_unmatched <- sum(is.na(submission_with_predictions$ensemble_prob_3))
 if (n_unmatched > 0) {
   stop(sprintf(paste0("%d of %d submission rows found no prediction. ",
@@ -110,8 +122,20 @@ submission_final <- submission_with_predictions %>%
   select(-dplyr::starts_with("ensemble_prob_"))
 
 ## Validate before writing ----
+# Check the shape FIRST. Every constraint below passes vacuously on an empty
+# frame: tapply over no rows gives a zero-length result, max(abs(x - 6)) is
+# then -Inf which is duly < 1e-6, all() of nothing is TRUE, and anyNA() of
+# nothing is FALSE. An empty submission would sail through and be written out
+# with "Constraints OK" printed above it.
+stopifnot(
+  "submission lost or gained rows" = nrow(submission_final) == nrow(submission_form),
+  "submission is empty"            = nrow(submission_final) > 0,
+  "match_id must never be missing" = !anyNA(submission_final$match_id)
+)
+
 match_totals <- tapply(submission_final$brownlow_votes, submission_final$match_id, sum)
 stopifnot(
+  "no matches found"                       = length(match_totals) > 0,
   "every match must total exactly 6 votes" = max(abs(match_totals - 6)) < 1e-6,
   "no player may fall outside 0-3 votes"   = all(submission_final$brownlow_votes >= 0 &
                                                  submission_final$brownlow_votes <= 3),

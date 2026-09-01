@@ -352,11 +352,35 @@ pooled sd 0.00034, so anything under 0.00067 is not decidable. The two are a
 Both runs reproduce the no-effect baseline at exactly 0.36089, which is what
 makes them comparable across scripts.
 
-This reopens retiring the `bam`: if a `group_by` and a shrinkage constant match
-an hour of `mgcv` and a 48 MB model, only the constant is worth keeping — and
-that can be read off one GAM fit and then hardcoded. See
-`analysis/evaluate_player_effect_final.R` for the deciding test (both features
-together, under IPF).
+That looked like it might retire the `bam` — but it does not hold under IPF,
+which is the normalizer actually being shipped. Retested under IPF, 5 seeds:
+
+| Config | RMSE | vs none | verdict |
+|---|---:|---:|---|
+| both | 0.35755 | −0.00158 | better |
+| `player_coef` only (needs the GAM) | 0.35801 | −0.00113 | better |
+| `player_bias` only (no GAM) | 0.35851 | −0.00062 | **within noise** |
+| neither | 0.35914 | baseline | |
+
+`player_coef` clears the bar against baseline; `player_bias` alone does not. The
+scale-to-6 tie did not survive the change of normalizer. **The GAM stays.**
+
+`both` was the nominal best, so it went to a 10-seed tiebreak:
+
+| Config | RMSE (10 seeds) | delta | verdict |
+|---|---:|---:|---|
+| both | 0.35779 | −0.00010 | **within noise** |
+| `player_coef` only | 0.35789 | baseline | |
+
+The difference fell from 0.00046 at 5 seeds to 0.00010 at 10 — shrinking toward
+zero as precision improves, which is the signature of a null effect rather than
+a small real one. **`player_bias` is not adopted**; it would add ten
+expanding-window fits per pipeline run for nothing measurable.
+
+Two things worth keeping from the exercise. The GAM-derived k = 5.81 was the
+best of the constants tried, so reading a shrinkage parameter off a fitted
+random effect works as a technique. And a 5-seed run would have been enough to
+adopt this change — the 10-seed check is what stopped it.
 
 A cruder alternative, the shrunk *raw* player mean with no residualisation,
 scored 0.36026 single-seed against the GAM's 0.36016 — also a tie. Residualising

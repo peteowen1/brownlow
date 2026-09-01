@@ -305,12 +305,19 @@ calculate_lagged_career_averages <- function(stats) {
       # Calculate career games played so far (excluding current game)
       career_games_so_far = pmax(0, dplyr::row_number() - 1),
 
-      # For each available metric, calculate cumulative average excluding current game
+      # For each available metric, the mean over PRIOR games only.
+      #
+      # Do not use cummean(lag(x, default = 0)) here. lag() injects a leading
+      # zero, so at game n that cummean is sum(x_1..x_{n-1}) / n rather than
+      # / (n-1) — every career average came out low by a factor of (n-1)/n,
+      # which is 50% at a player's second game and 90% at their tenth. The bias
+      # is a deterministic function of career length, so it also smuggled career
+      # length into every one of these features.
       !!!purrr::map(available_metrics, function(metric) {
         if (metric %in% names(stats)) {
-          # Use lag to exclude current game, then calculate cumulative mean
           rlang::expr(ifelse(career_games_so_far > 0,
-                            dplyr::cummean(dplyr::lag(!!rlang::sym(metric), default = 0)),
+                            cumsum(dplyr::lag(!!rlang::sym(metric), default = 0)) /
+                              career_games_so_far,
                             0))
         } else {
           rlang::expr(0)
@@ -358,29 +365,37 @@ calculate_lagged_career_averages <- function(stats) {
     message("Added career average for brownlow_votes based on prior complete seasons")
   }
 
-  # Validation: Check for data leakage
-  validation_cols <- paste0("career_avg_", available_metrics)
+  # Validation: the career average must not see the current game.
+  #
+  # The previous check flagged rows where career_avg_x happened to equal the
+  # current x, and printed a "Potential data leakage detected" message on nine
+  # features every single run. It was measuring integer coincidence, not
+  # leakage: the flag rate tracked the metric's cardinality almost perfectly
+  # (goals, 12 distinct values, 0.40% flagged; metres_gained, 957 distinct,
+  # 0.03%), and the lagged averages correlate 0.47-0.63 with the current value
+  # where a genuinely leaked feature would sit near 1.00. Nine false alarms a
+  # run is worse than no check, because a real regression would be
+  # indistinguishable from the usual noise.
+  #
+  # This tests the actual invariant instead: on a player's FIRST career game
+  # there is no prior data, so every career average must be exactly zero. If
+  # the current game leaks in, that is where it shows up unambiguously.
+  first_games <- stats_with_game_averages %>%
+    dplyr::filter(career_games_so_far == 0)
 
-  for (col in validation_cols) {
-    if (col %in% names(stats_with_game_averages)) {
-      # For each player, check that career average never equals current game value
-      current_metric <- stringr::str_remove(col, "career_avg_")
-      if (current_metric %in% names(stats_with_game_averages)) {
-
-        # Check for potential leakage (career average exactly equals current value when > 0)
-        potential_leakage <- stats_with_game_averages %>%
-          dplyr::filter(
-            !is.na(!!rlang::sym(col)) & !!rlang::sym(col) > 0 &
-            !is.na(!!rlang::sym(current_metric)) & !!rlang::sym(current_metric) > 0 &
-            abs(!!rlang::sym(col) - !!rlang::sym(current_metric)) < 0.001
-          )
-
-        if (nrow(potential_leakage) > 10) {  # Allow some tolerance for legitimate cases
-          message(sprintf("Warning: Potential data leakage detected in %s (perfect matches: %d)",
-                          col, nrow(potential_leakage)))
-        }
+  if (nrow(first_games) > 0) {
+    for (metric in available_metrics) {
+      col <- paste0("career_avg_", metric)
+      if (!col %in% names(first_games)) next
+      contaminated <- sum(!is.na(first_games[[col]]) & first_games[[col]] != 0)
+      if (contaminated > 0) {
+        stop(sprintf(paste0("Data leakage in %s: %d of %d debut games carry a ",
+                            "non-zero career average, but a debutant has no prior games."),
+                     col, contaminated, nrow(first_games)))
       }
     }
+    message(sprintf("Leakage check passed: %d career averages are zero on all %d debut games",
+                    length(available_metrics), nrow(first_games)))
   }
 
   # Feature summary

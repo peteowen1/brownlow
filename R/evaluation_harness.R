@@ -89,10 +89,31 @@ normalize_votes_scale <- function(prob_matrix, match_ids) {
 #' @return Numeric vector of predicted votes
 #' @export
 normalize_votes_ipf <- function(prob_matrix, match_ids, iters = 200) {
+  # split() silently discards NA keys, which would leave those rows at their
+  # initialised zero and read as a confident "no votes" rather than as skipped.
+  if (anyNA(match_ids)) {
+    stop(sprintf("%d rows have a missing match_id; every row must belong to a match.",
+                 sum(is.na(match_ids))))
+  }
+  if (any(prob_matrix < 0, na.rm = TRUE) || anyNA(prob_matrix)) {
+    stop("prob_matrix must be non-negative and free of NA before normalisation.")
+  }
+
   out <- numeric(nrow(prob_matrix))
   for (idx in split(seq_len(nrow(prob_matrix)), match_ids)) {
     M <- pmax(prob_matrix[idx, , drop = FALSE], 1e-12)
     n <- nrow(M)
+
+    # Three of the n players take votes, so the column targets are (n-3,1,1,1).
+    # At n = 3 the first target is 0, which drives column 1 to zero and makes
+    # the next target/colSums division 0/0 — NaN then propagates through every
+    # remaining iteration. At n = 2 the target goes negative and flips the sign
+    # of the update, producing values outside [0,3]. Neither is recoverable, so
+    # fail loudly rather than return plausible nonsense.
+    if (n < 4) {
+      stop(sprintf("Match has %d players; at least 4 are needed to allocate 3-2-1 votes.", n))
+    }
+
     target <- c(n - 3, 1, 1, 1)
     for (k in seq_len(iters)) {
       M <- M / rowSums(M)
