@@ -72,6 +72,48 @@ from zero we stop.
 votes, with the shrinkage falling as *r* grows and more evidence accumulates.
 Same empirical-Bayes shape as the `player_bias` work: `weight = r / (r + k)`.
 
+### VERDICT (2026-09-02): it persists — build it
+
+`analysis/overperformance_persistence.R`, walk-forward 2017-2025, `player_coef`
+excluded, 43 season-cutoff pairs:
+
+```
+ cutoff  n_seasons  mean_slope  se     t
+     10          7       0.314  0.213  1.48
+     12          9       0.282  0.116  2.44
+     14          9       0.193  0.080  2.42
+     16          9       0.181  0.065  2.77
+     18          9       0.183  0.065  2.80
+
+pooled: mean slope +0.227, se 0.047, t = +4.78
+```
+
+Comfortably past the `|t| < 2` kill threshold set before running it. Slope
+decays with more evidence (0.31 at cutoff 10 to 0.18 by cutoff 18) — the
+sensible direction, matching the `r/(r+k)` shrinkage shape planned above.
+R-sq is 0.019: a real, exploitable tilt on the margin, not a mechanism that
+will make the sim dramatically sharper.
+
+**Confound check, run before trusting it**: does the slope survive removing
+each player's own static career bias (the model always underrating ruckmen,
+say — knowable before the count, not something revealed during it)? Subtracted
+each player's leave-one-season-out mean per-game residual from both halves and
+repeated the regression:
+
+```
+pooled, unadjusted    : t +4.78
+pooled, bias-adjusted : t +6.20
+```
+
+The slope did not collapse — it strengthened. Static per-player bias is ruled
+out. What persists is genuinely revealed during a specific season's count,
+which is the mechanism proposed.
+
+**Next build step**: wire `weight = r / (r + k)` shrinkage into a live update
+of remaining-round expected votes, re-simulate with the shrunk forecast, and
+score against the §3b baseline. Fit `k` from the observed slope-vs-cutoff decay
+rather than guessing it.
+
 ---
 
 ## 2. Optimising the sim — metrics to lock before tuning
