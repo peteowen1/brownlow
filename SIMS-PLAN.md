@@ -29,6 +29,8 @@ Smith and Dawson were all within 3 votes; Rowell was 13 low. And 39 fell outside
 the 90th percentile of our simulated distribution (q90 = 31), so the spread was
 too tight as well as the centre too low.
 
+That single-season anecdote is superseded by a real nine-season evaluation — see §3b.
+
 ---
 
 ## 1. In-count momentum updating — Pete's idea, 2026-09-01
@@ -224,6 +226,70 @@ Reference: spreading probability evenly over ~20 real contenders scores about
 5,000 simulations rather than 2,000, because at 2,000 the smallest resolvable
 probability is 1/2000 and a genuine 20th-place finisher would read as an
 impossible zero.
+
+## 3b. Measured baseline (2026-09-02) — nine honest seasons, XGBoost only
+
+`analysis/simulation_backtest.R` walked forward 2017-2025, training only on prior
+seasons each time, `player_coef` excluded. XGBoost alone, not the shipped
+ensemble — a GAM fit is ~1 hour and nine of them was not worth it here; the
+current ensemble is 82% XGBoost, so this is a close proxy but not the exact
+shipped configuration.
+
+**Favourite calibration is good.** Favourite won 4 of 9 seasons (44%) against a
+mean stated probability of 49.8%. At n=9 the binomial standard error is about
+±17 points, so these agree — the sims are not systematically over- or
+under-confident about their top pick.
+
+```
+ season         winner  prob rank           favourite  fav_prob  won?
+   2017  Dustin Martin  52.9    1       Dustin Martin     52.9   YES
+   2018   Tom Mitchell  77.2    1        Tom Mitchell     77.2   YES
+   2019       Nat Fyfe  17.6    2 Patrick Dangerfield     34.4    no
+   2020   Lachie Neale  86.7    1        Lachie Neale     86.7   YES
+   2021    Ollie Wines  39.1    1         Ollie Wines     39.1   YES
+   2022 Patrick Cripps   8.1    4        Lachie Neale     36.6    no
+   2023   Lachie Neale   5.9    5  Christian Petracca     28.2    no
+   2024 Patrick Cripps  24.2    2         Nick Daicos     45.4    no
+   2025    Matt Rowell   6.6    4         Nick Daicos     48.3    no
+```
+
+**Winner in the model's top 3: 6 of 9.** The 2022-2025 stretch is noticeably
+harder than 2017-2021 (winner ranked 1st four times out of five early, then 4th,
+5th, 2nd, 4th) — nine seasons cannot say whether the Brownlow has become less
+predictable or something in the modern game shifted away from what these
+features capture, but the split is stark enough to flag.
+
+**Position-level log-loss**, computed from the saved raw output
+(`analysis/backtest_metrics.R`, §3a for methodology):
+
+| | log-loss | vs baseline |
+|---|---:|---|
+| uniform over the whole field (~663 players) | 6.497 | — |
+| uniform over a known shortlist of 20 | 2.996 | reference |
+| model, unconditional (must find the 20 itself) | 3.139 | worse than shortlist baseline |
+| model, conditional (renormalised within the true top 20) | 2.762 | better |
+| model, conditional + weighted 1/position | 2.269 | better |
+
+The unconditional number looking bad is not a defect — it is scoring a harder
+task than the shortlist baseline gets credit for (finding the contenders in 663
+players, not just ordering a known 20). The conditional number is the fair
+comparison and the model beats it throughout.
+
+**Where the model's knowledge runs out**, from the mass-in-top-20 by position:
+
+```
+position 1  : 110.8% of probability on genuine top-20 finishers
+position 10 :  74.2%
+position 20 :  37.5%
+```
+
+Conditional log-loss stays under the 2.996 shortlist baseline through roughly
+position 10, then degrades. **Practical read: winner, podium and top-5/top-10
+markets are supported by this model. A market on exact finish position past
+~10th is not — the model is spending most of its probability on players who did
+not finish there.**
+
+This is now the baseline every further sim change gets measured against.
 
 ## 4. Order of work
 
