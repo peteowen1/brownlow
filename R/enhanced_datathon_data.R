@@ -85,16 +85,61 @@ enhance_datathon_data <- function(file_path = "data/brownlow_datathon_dataset.cs
 #' @export
 standardize_team_name <- function(team_name) {
   dplyr::case_when(
-    team_name == "GWS" ~ "Greater Western Sydney",
-    team_name == "Brisbane Lions" ~ "Brisbane",
-    team_name == "North Melbourne" ~ "North Melbourne",
-    team_name == "Port Adelaide" ~ "Port Adelaide",
-    team_name == "St Kilda" ~ "St Kilda",
-    team_name == "West Coast" ~ "West Coast",
-    team_name == "Western Bulldogs" ~ "Western Bulldogs",
-    team_name == "Gold Coast" ~ "Gold Coast",
+    team_name %in% c("GWS", "GWS Giants", "Greater Western Sydney Giants") ~ "Greater Western Sydney",
+    team_name %in% c("Brisbane Lions", "Brisbane Bears") ~ "Brisbane",
+    team_name %in% c("Adelaide Crows") ~ "Adelaide",
+    team_name %in% c("Carlton Blues") ~ "Carlton",
+    team_name %in% c("Collingwood Magpies") ~ "Collingwood",
+    team_name %in% c("Essendon Bombers") ~ "Essendon",
+    team_name %in% c("Fremantle Dockers") ~ "Fremantle",
+    team_name %in% c("Geelong Cats") ~ "Geelong",
+    team_name %in% c("Gold Coast Suns") ~ "Gold Coast",
+    team_name %in% c("Hawthorn Hawks") ~ "Hawthorn",
+    team_name %in% c("Melbourne Demons") ~ "Melbourne",
+    team_name %in% c("North Melbourne Kangaroos", "Kangaroos") ~ "North Melbourne",
+    team_name %in% c("Port Adelaide Power") ~ "Port Adelaide",
+    team_name %in% c("Richmond Tigers") ~ "Richmond",
+    team_name %in% c("St Kilda Saints") ~ "St Kilda",
+    team_name %in% c("Sydney Swans") ~ "Sydney",
+    team_name %in% c("West Coast Eagles") ~ "West Coast",
+    team_name %in% c("Footscray", "Western Bulldogs Dogs") ~ "Western Bulldogs",
     TRUE ~ team_name  # Keep other names as-is
   )
+}
+
+#' Assert Team Names Are Consistent Across Seasons
+#'
+#' The raw datathon CSV has changed club naming between the historical block and
+#' the current season before: 2015-2024 shipped "Brisbane" and "GWS" while the
+#' 2025 rows shipped "Brisbane Lions" and "Greater Western Sydney". That silently
+#' breaks every feature keyed on team across seasons, and breaks the GAM's
+#' s(team) random effect outright, in the one season being predicted.
+#'
+#' @param data Data frame with `season` and a team column
+#' @param team_col Name of the team column to check
+#'
+#' @return `data`, invisibly. Errors if any club name is absent from a season.
+#' @export
+assert_team_names_consistent <- function(data, team_col = "team") {
+  if (!all(c("season", team_col) %in% names(data))) {
+    stop(sprintf("assert_team_names_consistent: need columns 'season' and '%s'; have: %s",
+                 team_col, paste(head(names(data), 20), collapse = ", ")))
+  }
+  tbl <- unique(as.data.frame(data)[, c("season", team_col)])
+  n_seasons <- length(unique(tbl$season))
+  counts <- table(tbl[[team_col]])
+  offenders <- names(counts)[counts < n_seasons]
+
+  if (length(offenders) > 0) {
+    detail <- vapply(offenders, function(t) {
+      sprintf("  %-28s only in: %s", t,
+              paste(sort(unique(tbl$season[tbl[[team_col]] == t])), collapse = ", "))
+    }, character(1))
+    stop(sprintf(paste0("Team names are not consistent across all %d seasons.\n",
+                        "Add the missing spelling to standardize_team_name().\n%s"),
+                 n_seasons, paste(detail, collapse = "\n")))
+  }
+  invisible(data)
 }
 
 enhance_datathon_data <- function(file_path = "data/brownlow_datathon_dataset.csv",
@@ -124,7 +169,18 @@ enhance_datathon_data <- function(file_path = "data/brownlow_datathon_dataset.cs
   enhanced_stats <- base_data$stats %>%
     janitor::clean_names() %>%
     dplyr::rename(brownlow_votes = votes) %>%
-    dplyr::mutate(player_name = paste(player_first_name, player_last_name))
+    dplyr::mutate(player_name = paste(player_first_name, player_last_name)) %>%
+    # Canonicalise club names at the single point of entry. The raw CSV has
+    # changed spelling between the historical block and the current season, so
+    # this must happen before anything groups or joins on team.
+    # load_datathon_data() renames player_team -> Team, which clean_names() then
+    # lowercases, so the column is `team` by this point.
+    dplyr::mutate(dplyr::across(
+      dplyr::any_of(c("team", "player_team", "match_home_team", "match_away_team")),
+      standardize_team_name
+    ))
+
+  assert_team_names_consistent(enhanced_stats, "team")
 
   # Add umpire data if requested
   if (add_umpires) {

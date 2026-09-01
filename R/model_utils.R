@@ -666,8 +666,9 @@ train_final_xgboost <- function(train_data, feature_cols, target_col, params, nr
     verbose = 1
   )
 
-  # Add best_iteration info to model for reference
-  model$best_iteration <- nrounds
+  # Booster objects are ALTREP-backed from xgboost 3.0 and reject arbitrary
+  # element assignment. The round count is recoverable via
+  # xgboost::xgb.get.num.boosted.rounds(model), so nothing is lost here.
 
   return(model)
 }

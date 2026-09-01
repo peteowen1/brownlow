@@ -210,7 +210,8 @@ predict_with_ensemble <- function(row_features, trained_models) {
       as.matrix()
 
     # Get predictions from individual models
-    xgb_probs <- predict(trained_models$ensemble$xgboost_model$model, feature_matrix, reshape = TRUE)
+    xgb_probs <- predict(trained_models$ensemble$xgboost_model$model, feature_matrix)
+    if (is.null(dim(xgb_probs))) xgb_probs <- matrix(xgb_probs, ncol = 4, byrow = TRUE)
     if (is.matrix(xgb_probs) && ncol(xgb_probs) == 4) {
       xgb_probs <- as.numeric(xgb_probs[1, ])
     } else {
@@ -260,7 +261,8 @@ predict_with_xgboost <- function(row_features, xgboost_model) {
 
     # Get probability predictions
     if (!is.null(xgboost_model$model)) {
-      probs <- predict(xgboost_model$model, feature_matrix, reshape = TRUE)
+      probs <- predict(xgboost_model$model, feature_matrix)
+      if (is.null(dim(probs))) probs <- matrix(probs, ncol = 4, byrow = TRUE)
       if (is.matrix(probs) && ncol(probs) == 4) {
         probs <- as.numeric(probs[1, ])
       } else {

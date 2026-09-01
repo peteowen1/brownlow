@@ -4,7 +4,12 @@
 \alias{save_submission_results}
 \title{Save Submission Results}
 \usage{
-save_submission_results(submission_template, output_file, verbose = TRUE)
+save_submission_results(
+  submission_template,
+  output_file,
+  verbose = TRUE,
+  add_timestamp = TRUE
+)
 }
 \arguments{
 \item{submission_template}{Original template with predictions}

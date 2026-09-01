@@ -7,6 +7,7 @@
 ## Load required libraries ----
 library(mgcv)
 library(dplyr)
+library(readr)
 library(tidyr)
 library(ggplot2)
 library(gridExtra)
@@ -292,9 +293,10 @@ cat(sprintf(" ✓ Log-loss: %.3f, Deviance: %.1f%%, Test accuracy: %.1f%%\n",
 
 cat("Retraining production GAM model on complete dataset...")
 
-# Combine all available data (training + test)
+# Combine all available data (training + test), dropping only the season we are
+# predicting. Never hardcode a year here: in 2026 that silently discards 2025.
 complete_gam_data <- bind_rows(gam_data_train, gam_data_test_clean) %>%
-  dplyr::filter(season != 2025)  # Exclude any incomplete future seasons
+  dplyr::filter(!season %in% prepared_data$holdout_seasons)
 
 cat(sprintf(" using %d observations from all seasons\n", nrow(complete_gam_data)))
 

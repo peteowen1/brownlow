@@ -11,6 +11,7 @@ train_production_xgboost(
   target_col,
   best_params,
   best_iteration,
+  exclude_seasons = NULL,
   verbose = TRUE
 )
 }
@@ -27,11 +28,16 @@ train_production_xgboost(
 
 \item{best_iteration}{Optimal number of rounds}
 
+\item{exclude_seasons}{Seasons to drop before training, e.g. a season whose
+votes are not yet known. Default NULL keeps every season.}
+
 \item{verbose}{Logical, whether to show progress messages}
 }
 \value{
 Trained production model
 }
 \description{
-Trains final production model on complete dataset for deployment.
+Trains the model that actually ships, on every season available for training
+(train + test), after `final_model` has been used for honest evaluation on the
+test seasons. This is the model whose probabilities go into the submission.
 }

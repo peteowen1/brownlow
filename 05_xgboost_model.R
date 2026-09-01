@@ -46,8 +46,11 @@ cat(sprintf(" %d features, train: %d, test: %d\n",
 # Setup Cross-Validation ####
 
 cat("Setting up cross-validation...")
-all_training_data <- prepared_data$train %>%
-  dplyr::filter(season != 2025)
+
+# prepare_modeling_data() already holds the target season out of $train, so this
+# is just the train seasons. Used for tuning and for the evaluation model only.
+all_training_data <- prepared_data$train
+stopifnot(!any(prepared_data$holdout_seasons %in% all_training_data$season))
 
 cv_folds <- create_time_aware_cv(
   data = all_training_data,
@@ -234,28 +237,37 @@ cat(sprintf(" ✓ Normalized Log-loss: %.3f, Test accuracy: %.1f%% -> %.1f%%, To
 
 # Retrain Production Model ####
 
+# final_model above saw only the train seasons, so its test-season metrics are
+# honest. It must NOT be the model that ships: it has never seen the two most
+# recent completed seasons. production_model is refit on train + test and is the
+# only model used for the probabilities below.
 production_model <- train_production_xgboost(
-  train_data = all_training_data,
+  train_data = prepared_data$train,
   test_data = prepared_data$test,
   feature_cols = prepared_data$feature_cols,
   target_col = prepared_data$target_col,
   best_params = tuning_results$best_params,
   best_iteration = tuning_results$best_iteration,
+  exclude_seasons = prepared_data$holdout_seasons,
   verbose = TRUE
 )
 
-imp <- xgboost::xgb.importance(model = final_model)
-# imp %>% tibble::as_tibble() %>% dplyr::arrange((Gain)) %>% print(n = 50)
+imp <- xgboost::xgb.importance(model = production_model)
 imp %>% tibble::as_tibble() %>% dplyr::arrange(dplyr::desc(Gain)) %>% print(n = 50)
 
 # Save XGBoost Probability DataFrame ####
 cat("\n=== SAVING XGBOOST PROBABILITIES ===\n")
 
-# Use ALL the data we already have (including 2025!)
 all_data <- bind_rows(prepared_data$train, prepared_data$test, prepared_data$holdout)
 
-# Generate XGBoost probabilities for all seasons
-xgb_probs <- predict(final_model, as.matrix(all_data[, prepared_data$feature_cols]), reshape = TRUE)
+# Generate XGBoost probabilities for all seasons from the PRODUCTION model.
+# xgboost >= 2.1 returns the multi-class matrix already shaped; the old
+# reshape = TRUE argument has been removed.
+xgb_probs <- predict(production_model, as.matrix(all_data[, prepared_data$feature_cols]))
+if (is.null(dim(xgb_probs))) {
+  xgb_probs <- matrix(xgb_probs, ncol = 4, byrow = TRUE)
+}
+stopifnot(nrow(xgb_probs) == nrow(all_data), ncol(xgb_probs) == 4)
 
 # Apply probability normalization to ensure 6 votes per match
 cat("Normalizing XGBoost probabilities...\n")

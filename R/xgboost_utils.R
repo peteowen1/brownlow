@@ -575,7 +575,9 @@ evaluate_xgboost_performance <- function(predictions, train_data, test_data, fin
 
 #' Train Production XGBoost Model
 #'
-#' Trains final production model on complete dataset for deployment.
+#' Trains the model that actually ships, on every season available for training
+#' (train + test), after `final_model` has been used for honest evaluation on the
+#' test seasons. This is the model whose probabilities go into the submission.
 #'
 #' @param train_data Training data
 #' @param test_data Test data
@@ -583,18 +585,29 @@ evaluate_xgboost_performance <- function(predictions, train_data, test_data, fin
 #' @param target_col Target column name
 #' @param best_params Optimal hyperparameters
 #' @param best_iteration Optimal number of rounds
+#' @param exclude_seasons Seasons to drop before training, e.g. a season whose
+#'   votes are not yet known. Default NULL keeps every season.
 #' @param verbose Logical, whether to show progress messages
 #'
 #' @return Trained production model
 #' @export
 train_production_xgboost <- function(train_data, test_data, feature_cols, target_col,
-                                    best_params, best_iteration, verbose = TRUE) {
+                                    best_params, best_iteration, exclude_seasons = NULL,
+                                    verbose = TRUE) {
   if (verbose) cat("Retraining production model on complete dataset...")
 
-  complete_dataset <- dplyr::bind_rows(train_data, test_data) %>%
-    dplyr::filter(season != 2025)  # Exclude any incomplete future seasons
+  complete_dataset <- dplyr::bind_rows(train_data, test_data)
 
-  if (verbose) cat(sprintf(" using %d observations from all seasons\n", nrow(complete_dataset)))
+  if (!is.null(exclude_seasons)) {
+    complete_dataset <- complete_dataset %>%
+      dplyr::filter(!season %in% exclude_seasons)
+  }
+
+  if (verbose) {
+    cat(sprintf(" using %d observations from seasons %s\n",
+                nrow(complete_dataset),
+                paste(sort(unique(complete_dataset$season)), collapse = ", ")))
+  }
 
   # Train production model with same optimal hyperparameters
   production_model <- train_final_xgboost(
