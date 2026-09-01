@@ -580,6 +580,58 @@ found. Note also that 355 rounds was chosen on 68k training rows and the
 production model now trains on 87k, so the honest number may be *higher*, not
 lower.
 
+## 5h. Verified end to end
+
+Scored on the submission file the pipeline actually writes, not on a harness
+approximation:
+
+```
+what shipped in 2025      0.36063
+what this pipeline makes  0.35734
+improvement               0.00329
+```
+
+That is 2nd of 23 against the model field in `data/brownlow-results-2025.csv` —
+though by 0.00004 over `consensus`, which is a tie in everything but the sort
+order. Clearly ahead of 3rd, level with 2nd, still 0.0076 behind `qp`.
+
+Note this number IS the "train to last season, predict the next one" test: the
+model fits 2015-2024 and 2025 is a holdout it never sees. When 2026 data lands,
+rerunning it is a regression check rather than a new question.
+
+The full pipeline runs `02` -> `03` -> `04` -> `05` -> `06` -> `09` under R 4.5.1
+and xgboost 3.2.1. `09` reports `Constraints OK: 207 matches, worst total error
+8.88e-16` — machine precision, against the old method's +/-0.006.
+
+Two further candidates were tested at this point and rejected, both within noise:
+454 rounds vs 355 (-0.00041 against a 0.00127 threshold) and within-match rank
+features (-0.00061). The round count is still switched to 454 on procedure
+grounds — it comes from leak-free walk-forward validation while 355 comes from
+random k-fold on time-series data, and when two numbers are tied the correctly
+derived one wins.
+
+### The 2025 winner, and why every model missed him
+
+Matt Rowell won with 39 votes. Predicted season totals across the whole field:
+
+```
+min 19.0   median 25.1   max 28.3   ours 24.0
+models predicting him above 30 votes: 0 of 22
+```
+
+Not one model had him within 11 votes, and none had him first — ours, consensus
+and wheelo all led with Daicos, `qp` with Bailey Smith. Meanwhile every other
+contender was predicted well (Daicos 29.2 vs 32, Smith 26.9 vs 29, Dawson 25.9
+vs 27). The field's collective error was concentrated on one player.
+
+A miss that 22 independent models make, in the same direction, at the same
+magnitude, is not a feature-engineering defect — it says the signal is absent
+from the shared inputs. All 22 are built on the same box scores and coaches
+votes. That reframes the season-to-date result: it failed to clear the noise
+floor partly because the effect it targets may not be recoverable from this
+dataset at all. Further gains need different inputs, not more transforms of
+these ones.
+
 ## 6. Codebase review
 
 28 files, 13,842 lines in `R/`, 173 exported functions.
