@@ -151,6 +151,13 @@ results <- lapply(seasons, function(S) {
   ord <- finish_order %>% dplyr::filter(season == S) %>% arrange(position) %>% pull(player_name)
   wll <- weighted_position_logloss(pp, ord)
 
+  # Persist the raw output. Every metric so far has required a refit to compute,
+  # which is why the conditional top-20 question could not be answered from the
+  # previous run. Saving these makes any future metric a re-read.
+  saveRDS(list(season = S, position_probs = pp, win_probs = wp,
+               finish_order = ord, n_players = nrow(pp)),
+          sprintf("analysis/harness/backtest_raw_%d.rds", S))
+
   cat(sprintf("  %d  train %d-%d (%d rounds) | winner %s %s | wLL %.3f\n",
               S, min(tr$season), max(tr$season), rounds, w$winner,
               if (nrow(hit)) sprintf("%.1f%% rank %d", hit$win_probability[1],
