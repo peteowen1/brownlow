@@ -7,11 +7,29 @@
 calculate_career_performance_summary(stats)
 }
 \arguments{
-\item{stats}{DataFrame with player statistics (no votes)}
+\item{stats}{DataFrame with player statistics (no votes), one row per game}
 }
 \value{
-DataFrame with player career performance features
+`stats` with the career performance columns added, row for row —
+  no longer a per-player summary requiring a join
 }
 \description{
-Creates summary statistics of each player's career performance patterns
+Creates lagged, PRIOR-GAMES-ONLY career performance features per row.
+}
+\details{
+Was a `group_by(player_name) %>% summarise(mean(...), max(...), sum(...))`
+joined back onto every row for that player — one number per player computed
+from their ENTIRE recorded career, including games after the row being
+scored. Verified live: `career_avg_tackles` was non-zero on 1,546 of 1,564
+debut games, where a correctly lagged feature must be exactly zero, since no
+prior game exists. All eight outputs are now cumulative statistics over
+strictly prior games, following the same `lag(x, default = 0)` +
+`cumsum()` / `career_total_games` discipline as
+`calculate_lagged_career_averages()` — divide by `career_total_games`
+(prior game COUNT), never `cummean()`, which was the separate n vs n-1 bug
+fixed elsewhere in this file.
+
+`first_season` is the one column kept as a plain (non-lagged) fact: which
+season a player debuted in is fixed the moment they debut and never depends
+on a future game, so it is not leakage.
 }

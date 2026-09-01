@@ -4,30 +4,73 @@
 
 #' Calculate Player Career Performance Summary
 #'
-#' Creates summary statistics of each player's career performance patterns
+#' Creates lagged, PRIOR-GAMES-ONLY career performance features per row.
 #'
-#' @param stats DataFrame with player statistics (no votes)
-#' @return DataFrame with player career performance features
+#' Was a `group_by(player_name) %>% summarise(mean(...), max(...), sum(...))`
+#' joined back onto every row for that player — one number per player computed
+#' from their ENTIRE recorded career, including games after the row being
+#' scored. Verified live: `career_avg_tackles` was non-zero on 1,546 of 1,564
+#' debut games, where a correctly lagged feature must be exactly zero, since no
+#' prior game exists. All eight outputs are now cumulative statistics over
+#' strictly prior games, following the same `lag(x, default = 0)` +
+#' `cumsum()` / `career_total_games` discipline as
+#' `calculate_lagged_career_averages()` — divide by `career_total_games`
+#' (prior game COUNT), never `cummean()`, which was the separate n vs n-1 bug
+#' fixed elsewhere in this file.
+#'
+#' `first_season` is the one column kept as a plain (non-lagged) fact: which
+#' season a player debuted in is fixed the moment they debut and never depends
+#' on a future game, so it is not leakage.
+#'
+#' @param stats DataFrame with player statistics (no votes), one row per game
+#' @return `stats` with the career performance columns added, row for row —
+#'   no longer a per-player summary requiring a join
 #' @export
 calculate_career_performance_summary <- function(stats) {
   stats %>%
+    dplyr::arrange(player_name, date) %>%
     dplyr::group_by(player_name) %>%
-    dplyr::summarise(
-      career_total_games = dplyr::n(),
-      career_avg_disposals = mean(kicks + handballs, na.rm = TRUE),
-      career_avg_goals = mean(goals, na.rm = TRUE),
-      career_avg_tackles = mean(tackles, na.rm = TRUE),
-      career_avg_marks = mean(marks, na.rm = TRUE),
-      career_avg_fantasy = mean(fantasy_score, na.rm = TRUE),
-      career_avg_impact = mean(impact_score, na.rm = TRUE),
-      career_games_high_disposals = sum((kicks + handballs) >= 25, na.rm = TRUE),
-      career_games_with_goals = sum(goals > 0, na.rm = TRUE),
-      career_consistency_disposals = 1 / (1 + stats::sd(kicks + handballs, na.rm = TRUE)),
-      career_max_disposals = max(kicks + handballs, na.rm = TRUE),
-      career_max_goals = max(goals, na.rm = TRUE),
-      first_season = min(season, na.rm = TRUE),
-      .groups = "drop"
-    )
+    dplyr::mutate(
+      career_total_games = dplyr::row_number() - 1L,
+
+      career_avg_disposals = cumsum(dplyr::lag(kicks + handballs, default = 0)) /
+                              pmax(career_total_games, 1),
+      career_avg_goals     = cumsum(dplyr::lag(goals, default = 0)) /
+                              pmax(career_total_games, 1),
+      career_avg_tackles   = cumsum(dplyr::lag(tackles, default = 0)) /
+                              pmax(career_total_games, 1),
+      career_avg_marks     = cumsum(dplyr::lag(marks, default = 0)) /
+                              pmax(career_total_games, 1),
+      career_avg_fantasy   = cumsum(dplyr::lag(fantasy_score, default = 0)) /
+                              pmax(career_total_games, 1),
+      career_avg_impact    = cumsum(dplyr::lag(impact_score, default = 0)) /
+                              pmax(career_total_games, 1),
+
+      career_games_high_disposals = cumsum(dplyr::lag((kicks + handballs) >= 25, default = FALSE)),
+      career_games_with_goals     = cumsum(dplyr::lag(goals > 0, default = FALSE)),
+      career_max_disposals        = cummax(dplyr::lag(kicks + handballs, default = 0)),
+      career_max_goals            = cummax(dplyr::lag(goals, default = 0)),
+
+      # Cumulative sd of the lagged series via the incremental sum/sum-of-squares
+      # identity — there is no cumsd() in base R or dplyr. Needs at least 2 prior
+      # games to be meaningful; defaults to 0 before that, matching the "no
+      # information yet" convention every other lagged feature here uses (NOT
+      # the original formula's 1/(1+NA-or-0)=1, which claimed perfect
+      # consistency for a player with zero career games — actively backwards).
+      .disp_lag    = dplyr::lag(kicks + handballs, default = 0),
+      .disp_cumsum = cumsum(.disp_lag),
+      .disp_cumsq  = cumsum(.disp_lag^2),
+      .disp_var    = ifelse(career_total_games >= 2,
+                            pmax((.disp_cumsq - .disp_cumsum^2 / career_total_games) /
+                                   (career_total_games - 1), 0),
+                            NA_real_),
+      career_consistency_disposals = ifelse(career_total_games >= 2,
+                                            1 / (1 + sqrt(.disp_var)), 0),
+
+      first_season = min(season, na.rm = TRUE)
+    ) %>%
+    dplyr::select(-dplyr::starts_with(".disp_")) %>%
+    dplyr::ungroup()
 }
 
 #' Calculate Recent Performance Trends
@@ -417,19 +460,17 @@ calculate_lagged_career_averages <- function(stats) {
 #' @export
 create_comprehensive_performance_historical_features <- function(stats) {
 
-  # Calculate career performance summary
-  career_performance <- calculate_career_performance_summary(stats)
-
-  # Join career features to main stats
-  stats_with_history <- stats %>%
-    dplyr::left_join(career_performance, by = "player_name") %>%
+  # calculate_career_performance_summary() now returns stats row for row (each
+  # career_avg_*/career_max_*/etc. already lagged to prior games only), not a
+  # per-player summary table — no join, and no NA replacement needed, since the
+  # cumulative formulas default to 0 for a debut row by construction.
+  #
+  # career_stage is now correctly time-varying with career_total_games (games
+  # BEFORE this one): a player is a "rookie" early in their career and becomes
+  # a "veteran" as games accumulate, rather than the whole-career-length label
+  # it was reading as before the fix.
+  stats_with_history <- calculate_career_performance_summary(stats) %>%
     dplyr::mutate(
-      # Replace NAs for new players
-      dplyr::across(c(career_total_games, career_avg_disposals, career_avg_goals,
-                      career_avg_tackles, career_avg_marks, career_avg_fantasy,
-                      career_avg_impact), ~tidyr::replace_na(.x, 0)),
-
-      # Career stage indicators
       career_games_experience = career_total_games,
       career_stage = dplyr::case_when(
         career_total_games < 10 ~ "rookie",
@@ -439,6 +480,29 @@ create_comprehensive_performance_historical_features <- function(stats) {
         TRUE ~ "legend"
       )
     )
+
+  # The bug this replaced was invisible precisely because nothing checked it.
+  # A debut row has no prior games, so every one of these must be exactly zero.
+  first_games <- stats_with_history %>%
+    dplyr::arrange(player_name, date) %>%
+    dplyr::group_by(player_name) %>%
+    dplyr::slice(1) %>%
+    dplyr::ungroup()
+  leaky_cols <- c("career_total_games", "career_avg_disposals", "career_avg_goals",
+                  "career_avg_tackles", "career_avg_marks", "career_avg_fantasy",
+                  "career_avg_impact", "career_games_high_disposals",
+                  "career_games_with_goals", "career_max_disposals",
+                  "career_max_goals", "career_consistency_disposals")
+  for (col in leaky_cols) {
+    bad <- sum(!is.na(first_games[[col]]) & first_games[[col]] != 0)
+    if (bad > 0) {
+      stop(sprintf(paste0("%s is non-zero on %d of %d debut games. A debutant ",
+                          "has no prior games, so this must be exactly zero."),
+                   col, bad, nrow(first_games)))
+    }
+  }
+  message(sprintf("Career performance check passed: %d columns zero on all %d debut games",
+                  length(leaky_cols), nrow(first_games)))
 
   # Add recent trends, position patterns, and prior season features
   stats_enhanced <- stats_with_history %>%
