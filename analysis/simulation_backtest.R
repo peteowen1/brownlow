@@ -18,7 +18,14 @@
 # dplyr filter per match per simulation (2.778 s per season sim, 15.4 hours for
 # this backtest). prepare_season_sim() hoists the split out and runs in 0.028 s.
 #
-# LIMITATION, stated rather than buried: this backtests XGBoost alone, not the
+# TWO LIMITATIONS, stated rather than buried.
+#
+# First, player_coef is excluded — see the note where feats is defined. It is a
+# GAM random effect fitted once over 2015-2024, so it is constant for a player's
+# entire career and cannot be given to a fold that should only see earlier
+# seasons. The shipped model uses it legitimately; this backtest cannot.
+#
+# Second, this backtests XGBoost alone, not the
 # XGBoost+GAM ensemble, because a GAM fit is ~1 hour and nine of them is not
 # worth it here. The current ensemble is 82% XGBoost, so it is a close proxy but
 # not the shipped configuration.
@@ -41,12 +48,28 @@ FIRST   <- 2017   # needs enough prior seasons to train on
 
 enhanced <- readRDS("data/processed/enhanced_modeling_data.rds")
 tuning   <- readRDS("models/xgboost_tuning_results.rds")
-feats    <- enhanced$feature_cols
 target   <- enhanced$target_col
 
+# DROP player_coef. It comes from models/gam_production_model.rds, which is fitted
+# once on 2015-2024 — so it takes exactly ONE value for a player's whole career
+# (verified: constant for 100% of players, against 0% for every lagged feature).
+# Handing that to a fold nominally trained on 2015-2016 tells it how players
+# polled through 2024, including the season it is predicting. A first pass with it
+# in had models trained on two seasons calling the winner at 55% and 87%.
+#
+# The shipped pipeline is NOT affected: there the GAM fits on 2015-2024 and the
+# coefficient is applied to 2025 rows it never saw. Only reusing one fitted
+# coefficient across walk-forward folds is illegitimate.
+#
+# Cost: the backtest is mildly pessimistic against the shipped model, which
+# legitimately gains ~0.001 RMSE from this feature.
+feats <- setdiff(enhanced$feature_cols, "player_coef")
+cat(sprintf("features: %d (player_coef dropped - leaks future seasons into every fold)
+", length(feats)))
+
 all_data <- bind_rows(enhanced$train, enhanced$test, enhanced$holdout) %>%
-  mutate(player_coef = replace_na(player_coef, 0)) %>%
   arrange(season, date)
+stopifnot("player_coef must not reach the model" = !"player_coef" %in% feats)
 
 register <- load_ineligible_players()
 

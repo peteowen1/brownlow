@@ -127,6 +127,65 @@ slower than `normalize_votes_ipf()` and lands within ±0.006 rather than exactly
 
 ---
 
+## 3a. Backtest methodology, and a leak that nearly got through
+
+The saved 2023/2024 simulations cannot be evaluated: the production model trains
+on 2015-2024, so those seasons are in-sample. Only 2025 was genuinely held out,
+which left ONE honest evaluation point. `analysis/simulation_backtest.R` rebuilds
+them walk-forward — train on seasons < S, predict S — giving nine.
+
+**`player_coef` had to be dropped from the backtest.** It is a GAM random effect
+fitted once over 2015-2024, so it takes exactly one value for a player's entire
+career. Handing that to a fold nominally trained on 2015-2016 tells it how
+players polled through 2024, including the season being predicted.
+
+The tell was not a check, it was implausibility: models trained on **two seasons**
+were calling the winner at 55.5% and 87.0%, while the full-data 2025 sim managed
+11.2%. Less data producing more confidence is backwards.
+
+The diagnostic that confirmed it generalises:
+
+| feature | constant across a player's whole career |
+|---|---:|
+| `player_coef` | **100.0%** |
+| `career_avg_brownlow_votes_prior_seasons` | 30.2% |
+| `career_avg_coaches_votes` | 5.8% |
+| `career_avg_disposals` | 0.0% |
+| `recent_avg_impact` | 0.0% |
+
+**A feature that never changes across a career cannot be prior-only** — anything
+genuinely accumulated has to move as games accumulate. `n_distinct()` per player
+over a long career separates "fitted once over everything" from "built from the
+past" in one line.
+
+Correlating with future outcomes did NOT discriminate: `player_coef` correlated
++0.183 with later-season votes while the entirely legitimate `coaches_votes`
+correlated +0.456. Good predictors correlate with the future; that is their job.
+Constancy is the tell, not correlation.
+
+The shipped pipeline is unaffected — there the GAM fits on 2015-2024 and the
+coefficient is applied to 2025 rows it never saw, which is ordinary
+fit-on-train-apply-to-test. Only reusing one fitted coefficient across
+walk-forward folds is illegitimate. Cost: the backtest is mildly pessimistic
+against the shipped model, which legitimately gains ~0.001 RMSE from the feature.
+
+### Scoring
+
+Winner-only log-loss gives 9 points across 9 seasons and is dominated by whether
+one longshot came in. The backtest instead scores the actual top 20 — roughly the
+best player at each of the 18 clubs — weighted `1/position`, so the winner still
+dominates at 1.0 while twentieth contributes 0.05. That is 180 evaluation points
+and it measures whether the model has the right *shape* over contenders, which is
+what decides whether a book of bets is profitable rather than a single bet on the
+favourite.
+
+Reference: spreading probability evenly over ~20 real contenders scores about
+`-log(1/20) = 3.00`. Lower is better.
+
+5,000 simulations rather than 2,000, because at 2,000 the smallest resolvable
+probability is 1/2000 and a genuine 20th-place finisher would read as an
+impossible zero.
+
 ## 4. Order of work
 
 1. Populate the eligibility register from an authoritative source, and wire
