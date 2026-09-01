@@ -55,7 +55,9 @@ actual_2025 <- read_csv("analysis/submission_comparison/detailed_predictions_vs_
             team = player_team_std, player_name = full_player_name, actual_votes = Actual)
 
 cat("=== walk-forward predictions ===\n")
+FIRST <- 2017   # optimal_nrounds() needs >=2 prior seasons to fit/validate on
 seasons <- sort(unique(all_data$season))
+seasons <- seasons[seasons >= FIRST]
 preds <- lapply(seasons, function(S) {
   tr <- all_data %>% dplyr::filter(season < S)
   te <- all_data %>% dplyr::filter(season == S)
