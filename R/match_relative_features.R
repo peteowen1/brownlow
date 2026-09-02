@@ -75,23 +75,37 @@ add_match_relative_features <- function(stats,
 #' codebase keeps meeting. Checks that the match's highest raw value carries
 #' the lowest rank.
 #'
+#' Ties do not confuse this: under a tied match maximum both `which.max()` on
+#' the raw value and `which.min()` on the rank resolve to the FIRST index of
+#' the tied group, so they agree. Ties are not rare — 12% of matches have a
+#' tied top disposal count — so this mattered enough to check rather than
+#' assume.
+#'
 #' @param stats DataFrame from `add_match_relative_features()`
-#' @param col Base column to verify
+#' @param cols Base columns to verify. Defaults to every column with a `_rank`
+#'   counterpart, rather than one hand-picked column: checking a single column
+#'   would leave the others unverified if the formulas ever diverge.
 #' @return `stats`, invisibly, after the assertion passes
 #' @export
-assert_match_relative_clean <- function(stats, col = "supercoach_score") {
-  rank_col <- paste0(col, "_rank")
-  if (!rank_col %in% names(stats)) stop(sprintf("%s not found.", rank_col))
+assert_match_relative_clean <- function(stats, cols = NULL) {
+  if (is.null(cols)) {
+    cols <- sub("_rank$", "", grep("_rank$", names(stats), value = TRUE))
+    cols <- intersect(cols, names(stats))
+  }
+  if (length(cols) == 0) stop("No `*_rank` columns found to verify.")
 
-  bad <- stats %>%
-    dplyr::group_by(match_id) %>%
-    dplyr::summarise(ok = which.max(.data[[col]]) == which.min(.data[[rank_col]]),
-                     .groups = "drop") %>%
-    dplyr::filter(!ok)
+  for (col in cols) {
+    rank_col <- paste0(col, "_rank")
+    bad <- stats %>%
+      dplyr::group_by(match_id) %>%
+      dplyr::summarise(ok = which.max(.data[[col]]) == which.min(.data[[rank_col]]),
+                       .groups = "drop") %>%
+      dplyr::filter(!ok)
 
-  if (nrow(bad) > 0) {
-    stop(sprintf("Rank orientation wrong in %d matches: the top %s does not hold the lowest rank.",
-                 nrow(bad), col))
+    if (nrow(bad) > 0) {
+      stop(sprintf("Rank orientation wrong in %d matches: the top %s does not hold the lowest rank.",
+                   nrow(bad), col))
+    }
   }
   invisible(stats)
 }

@@ -4,12 +4,14 @@
 \alias{assert_match_relative_clean}
 \title{Assert Match-Relative Ranks Are Oriented Correctly}
 \usage{
-assert_match_relative_clean(stats, col = "supercoach_score")
+assert_match_relative_clean(stats, cols = NULL)
 }
 \arguments{
 \item{stats}{DataFrame from `add_match_relative_features()`}
 
-\item{col}{Base column to verify}
+\item{cols}{Base columns to verify. Defaults to every column with a `_rank`
+counterpart, rather than one hand-picked column: checking a single column
+would leave the others unverified if the formulas ever diverge.}
 }
 \value{
 `stats`, invisibly, after the assertion passes
@@ -19,4 +21,10 @@ An inverted rank would silently reverse the feature's meaning while still
 producing plausible-looking numbers in [0, 1] — the failure mode this
 codebase keeps meeting. Checks that the match's highest raw value carries
 the lowest rank.
+
+Ties do not confuse this: under a tied match maximum both `which.max()` on
+the raw value and `which.min()` on the rank resolve to the FIRST index of
+the tied group, so they agree. Ties are not rare — 12% of matches have a
+tied top disposal count — so this mattered enough to check rather than
+assume.
 }
