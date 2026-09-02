@@ -25,19 +25,18 @@ library(dplyr)
 devtools::load_all()
 
 TUNING_FILE <- "models/xgboost_tuning_results.rds"
-BACKUP_FILE <- "models/xgboost_tuning_results_stale_20250925.rds"
+# Timestamped for the same reason as adopt_rmse_rounds.R: a fixed name guarded
+# by file.exists() protects only the first invocation.
+BACKUP_FILE <- sprintf("models/xgboost_tuning_results_pre_honest_%s.rds",
+                       format(Sys.time(), "%Y%m%d_%H%M%S"))
 HONEST_FILE <- "models/xgboost_honest_tuning_267.rds"
 HONEST_NROUNDS <- 391L
 
 stale  <- readRDS(TUNING_FILE)
 honest <- readRDS(HONEST_FILE)
 
-if (!file.exists(BACKUP_FILE)) {
-  saveRDS(stale, BACKUP_FILE)
-  cat(sprintf("backed up incumbent -> %s\n", BACKUP_FILE))
-} else {
-  cat(sprintf("backup already present, not overwriting: %s\n", BACKUP_FILE))
-}
+saveRDS(stale, BACKUP_FILE)
+cat(sprintf("backed up incumbent -> %s\n", BACKUP_FILE))
 
 adopted <- list(
   best_params    = honest$best_params,

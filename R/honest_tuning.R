@@ -95,6 +95,10 @@ tune_xgboost_honest <- function(train_data, feature_cols, target_col, param_grid
         vax <- as.matrix(va[, feature_cols])
         y_va <- va[[target_col]]
         grid <- sort(unique(pmin(round_grid, max_rounds)))
+        # iterationrange = c(1, k) uses EXACTLY k trees — verified empirically on
+        # xgboost 3.2.1.1 against a model trained fresh to k rounds. Do NOT
+        # "fix" this to c(1, k + 1); the upper bound is capped at the rounds
+        # actually trained, so that errors at the top of the grid.
         s <- vapply(grid, function(k) {
           pm <- as_prob_matrix(stats::predict(m, vax, iterationrange = c(1, k)), nrow(va))
           sqrt(mean((normalize_votes_ipf(pm, va[[match_id_col]]) - y_va)^2))

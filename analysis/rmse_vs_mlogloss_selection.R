@@ -52,9 +52,10 @@ mlogloss <- function(P, y) -mean(log(pmax(P[cbind(seq_along(y), y + 1L)], 1e-15)
 
 cat("\nscoring the validation season at each truncation (no retraining)\n")
 curve <- lapply(ROUND_GRID, function(k) {
-  # iterationrange's upper bound is capped at the rounds actually trained, so
-  # c(1, k + 1) blows up at the top of the grid. The resulting off-by-one (k-1
-  # vs k trees) is immaterial against 25-round grid steps.
+  # iterationrange = c(1, k) uses EXACTLY k trees -- verified empirically on
+  # xgboost 3.2.1.1 against a model trained fresh to k rounds (bit-identical).
+  # Do NOT "fix" this to c(1, k + 1): the upper bound is capped at the rounds
+  # actually trained, so that errors at the top of the grid.
   P <- as_prob_matrix(predict(m, valx, iterationrange = c(1, k)), nrow(val))
   votes <- normalize_votes_ipf(P, val$match_id)
   tibble(nrounds = k,

@@ -22,7 +22,12 @@ library(xgboost)
 devtools::load_all()
 
 MAX_ROUNDS <- 2000
-BACKUP <- "models/xgboost_tuning_results_pre_rmse_rounds.rds"
+# Timestamped, not a single fixed name: `if (!file.exists(BACKUP))` only ever
+# captured the FIRST pre-overwrite state, so a second run -- which this
+# script's own instructions invite after any retune -- silently skipped the
+# backup and left the only recoverable copy pointing months back.
+BACKUP <- sprintf("models/xgboost_tuning_results_pre_rmse_rounds_%s.rds",
+                  format(Sys.time(), "%Y%m%d_%H%M%S"))
 
 enhanced <- readRDS("data/processed/enhanced_modeling_data.rds")
 tuning   <- readRDS("models/xgboost_tuning_results.rds")

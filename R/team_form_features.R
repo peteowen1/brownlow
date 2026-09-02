@@ -71,7 +71,27 @@ add_team_form_vs_expectation <- function(stats) {
                   team_current_season_win_rate_so_far, team_form_vs_expectation,
                   team_no_prior_season)
 
-  stats %>% dplyr::left_join(team_games, by = c("season", "date", "team"))
+  # A left_join fans out if team_games holds two rows for one (season, date,
+  # team) — which happens if a fixture appears twice with different scores. Not
+  # hypothetical here: the 2025 Gold Coast v Essendon match was postponed by
+  # Cyclone Alfred and replayed, and the sources label it inconsistently (see
+  # attach_holdout_actuals()). Duplicated player-games would pass every other
+  # assertion in assert_team_form_clean(): no NAs, rates still in [0,1], debut
+  # rows still neutral. So check it where the information exists.
+  dupes <- team_games %>%
+    dplyr::count(season, date, team) %>%
+    dplyr::filter(n > 1)
+  if (nrow(dupes) > 0) {
+    stop(sprintf("%d (season, date, team) keys appear more than once; the join would duplicate player rows.",
+                 nrow(dupes)))
+  }
+
+  n_before <- nrow(stats)
+  out <- stats %>% dplyr::left_join(team_games, by = c("season", "date", "team"))
+  if (nrow(out) != n_before) {
+    stop(sprintf("Join changed row count: %d -> %d.", n_before, nrow(out)))
+  }
+  out
 }
 
 #' Assert Team Form Features Are Leak-Free

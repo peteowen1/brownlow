@@ -142,12 +142,23 @@ optimal_nrounds <- function(train_data, feature_cols, target_col, params,
     model <- xgboost::xgb.train(params = params, data = dfit, nrounds = max_rounds, verbose = 0)
 
     if (is.null(round_grid)) round_grid <- seq(100, max_rounds, by = 100)
+    # pmin() would silently collapse an entirely-out-of-range grid to a single
+    # point at max_rounds, so the "search" would return the ceiling as if it
+    # had been chosen. Fail instead: that is a different search from the one
+    # the caller asked for.
+    if (min(round_grid) > max_rounds) {
+      stop(sprintf("round_grid's minimum (%d) exceeds max_rounds (%d); nothing to search.",
+                   min(round_grid), max_rounds))
+    }
     round_grid <- sort(unique(pmin(round_grid, max_rounds)))
     valx <- as.matrix(val[, feature_cols])
     y_val <- val[[target_col]]
 
     scores <- vapply(round_grid, function(k) {
-      # iterationrange's upper bound is capped at the rounds actually trained.
+      # iterationrange = c(1, k) uses EXACTLY k trees -- verified empirically on
+      # xgboost 3.2.1.1 against a model trained fresh to k rounds (bit-identical).
+      # Do NOT "fix" this to c(1, k + 1): the upper bound is capped at the rounds
+      # actually trained, so that errors at the top of the grid.
       pm <- as_prob_matrix(stats::predict(model, valx, iterationrange = c(1, k)), nrow(val))
       votes <- normalize_votes_ipf(pm, val[[match_id_col]])
       sqrt(mean((votes - y_val)^2))
@@ -156,12 +167,22 @@ optimal_nrounds <- function(train_data, feature_cols, target_col, params,
     best <- which.min(scores)
     result <- list(nrounds = as.integer(round_grid[best]),
                    score   = as.numeric(scores[best]),
-                   metric  = "rmse_ipf")
+                   metric  = "rmse_ipf",
+                   hit_ceiling = round_grid[best] >= max_rounds)
 
     if (verbose) {
-      cat(sprintf("optimal_nrounds: %d rounds (rmse_ipf %.5f)%s\n",
-                  result$nrounds, result$score,
-                  if (result$nrounds >= max_rounds) "  [hit max_rounds - raise it]" else ""))
+      cat(sprintf("optimal_nrounds: %d rounds (rmse_ipf %.5f)\n",
+                  result$nrounds, result$score))
+    }
+    # warning(), not cat(): a cat() carries no condition, so it cannot be caught,
+    # never reaches Rscript's "Warning messages:" summary, and is invisible to
+    # anyone grepping a log. Hitting the ceiling means the optimum was never
+    # bracketed — and callers other than analysis/adopt_rmse_rounds.R do not
+    # check for it, including the walk-forward weight derivation.
+    if (isTRUE(result$hit_ceiling)) {
+      warning(sprintf(paste0("optimal_nrounds hit max_rounds (%d) under %s: the optimum was not ",
+                             "bracketed, so this is a ceiling rather than a choice. Raise max_rounds."),
+                      max_rounds, metric), call. = FALSE)
     }
 
     cache[[key]] <- result
@@ -194,12 +215,17 @@ optimal_nrounds <- function(train_data, feature_cols, target_col, params,
 
   result <- list(nrounds = as.integer(best),
                  score   = as.numeric(scores[best]),
-                 metric  = score_col)
+                 metric  = score_col,
+                 hit_ceiling = best >= max_rounds)
 
   if (verbose) {
-    cat(sprintf("optimal_nrounds: %d rounds (%s %.5f)%s\n",
-                result$nrounds, result$metric, result$score,
-                if (result$nrounds >= max_rounds) "  [hit max_rounds — raise it]" else ""))
+    cat(sprintf("optimal_nrounds: %d rounds (%s %.5f)\n",
+                result$nrounds, result$metric, result$score))
+  }
+  if (isTRUE(result$hit_ceiling)) {
+    warning(sprintf(paste0("optimal_nrounds hit max_rounds (%d) under %s: the optimum was not ",
+                           "bracketed, so this is a ceiling rather than a choice. Raise max_rounds."),
+                    max_rounds, metric), call. = FALSE)
   }
 
   cache[[key]] <- result
