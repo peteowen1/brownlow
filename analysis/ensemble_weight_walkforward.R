@@ -138,12 +138,17 @@ rmse_at <- function(w, X, G, ids, actual) {
   sqrt(mean((normalize_votes_ipf(w * X + (1 - w) * G, ids) - actual)^2))
 }
 
-grid <- seq(0, 1, by = 0.05)
-sel <- vapply(grid, function(w) rmse_at(w, Xs, Gs, wf$match_id, wf$actual), numeric(1))
-sel_tbl <- tibble(w_xgb = grid, walkforward_rmse = sel)
+# select_ensemble_weight() takes matrices rather than a model_results object, so
+# the honesty of the selection is decided here, at the call site, by what we
+# hand it -- walk-forward predictions. That is the whole distinction from
+# optimize_ensemble_weights(), which fetches its own (in-sample) predictions.
+sel_res <- select_ensemble_weight(list(Xs, Gs), actual = wf$actual,
+                                  match_ids = wf$match_id, metric = "rmse_ipf",
+                                  grid = seq(0, 1, by = 0.05))
+sel_tbl <- sel_res$curve %>% dplyr::rename(w_xgb = weight, walkforward_rmse = score)
 cat("\n=== weight curve on WALK-FORWARD 2023-24 predictions ===\n")
 print(as.data.frame(sel_tbl), row.names = FALSE, digits = 6)
-w_star <- grid[which.min(sel)]
+w_star <- sel_res$weight
 cat(sprintf("\n  walk-forward-selected w_xgb = %.2f\n", w_star))
 
 # ---- apply once to 2025 -------------------------------------------------------
