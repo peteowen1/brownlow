@@ -2,7 +2,7 @@
 % Please edit documentation in R/prediction_utils.R
 \name{apply_voting_constraints}
 \alias{apply_voting_constraints}
-\title{Prediction Utilities for Brownlow Medal Models}
+\title{Make Constrained Predictions}
 \usage{
 apply_voting_constraints(
   predictions,
@@ -24,11 +24,6 @@ apply_voting_constraints(
 Vector of constrained predictions
 }
 \description{
-This file contains utility functions for making predictions, handling constraints,
-creating ensembles, and generating submission files.
-Make Constrained Predictions
-}
-\details{
 Adjusts raw predictions to ensure exactly 6 votes per match while preserving
 relative rankings as much as possible
 }

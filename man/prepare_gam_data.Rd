@@ -2,7 +2,7 @@
 % Please edit documentation in R/gam_utils.R
 \name{prepare_gam_data}
 \alias{prepare_gam_data}
-\title{GAM Utility Functions for Brownlow Medal Prediction}
+\title{Prepare GAM Data}
 \usage{
 prepare_gam_data(
   train_data,
@@ -36,11 +36,6 @@ prepare_gam_data(
 List with prepared training and test data
 }
 \description{
-This file contains utility functions for GAM data preparation, model building,
-and prediction conversion specifically for Brownlow Medal prediction using mgcv.
-Prepare GAM Data
-}
-\details{
 Prepares training and test data for GAM modeling with proper factor handling,
 player lumping, and target variable conversion for ordered categorical models
 }

@@ -2,7 +2,7 @@
 % Please edit documentation in R/script_utils.R
 \name{load_features_for_prediction}
 \alias{load_features_for_prediction}
-\title{Script Utilities for Brownlow Medal Analysis}
+\title{Load Features for Prediction}
 \usage{
 load_features_for_prediction(target_season, verbose = TRUE)
 }
@@ -15,11 +15,6 @@ load_features_for_prediction(target_season, verbose = TRUE)
 List with features data and metadata
 }
 \description{
-This file contains utility functions to simplify the main analysis scripts (01-07)
-by handling all the complex data loading, validation, and error handling internally.
-Load Features for Prediction
-}
-\details{
 Smart function that loads the best available feature data for a given season,
 handling all the complexity of checking multiple data sources internally.
 }

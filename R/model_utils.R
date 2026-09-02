@@ -1,7 +1,7 @@
-#' Model Utilities for Brownlow Medal Prediction
-#'
-#' This file contains utility functions for model training, validation,
-#' evaluation, and hyperparameter tuning.
+# Model Utilities for Brownlow Medal Prediction
+#
+# This file contains utility functions for model training, validation,
+# evaluation, and hyperparameter tuning.
 
 #' Prepare Data for Modeling
 #'

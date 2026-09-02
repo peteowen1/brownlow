@@ -1,7 +1,7 @@
-#' Script Utilities for Brownlow Medal Analysis
-#'
-#' This file contains utility functions to simplify the main analysis scripts (01-07)
-#' by handling all the complex data loading, validation, and error handling internally.
+# Script Utilities for Brownlow Medal Analysis
+#
+# This file contains utility functions to simplify the main analysis scripts (01-07)
+# by handling all the complex data loading, validation, and error handling internally.
 
 #' Load Features for Prediction
 #'

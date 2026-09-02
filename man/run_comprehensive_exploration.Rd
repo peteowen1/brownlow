@@ -2,7 +2,7 @@
 % Please edit documentation in R/exploration_utils.R
 \name{run_comprehensive_exploration}
 \alias{run_comprehensive_exploration}
-\title{Data Exploration Utilities}
+\title{Run Comprehensive Data Exploration}
 \usage{
 run_comprehensive_exploration(brownlow_data, save_plots = TRUE, verbose = TRUE)
 }
@@ -17,11 +17,6 @@ run_comprehensive_exploration(brownlow_data, save_plots = TRUE, verbose = TRUE)
 List containing all exploration results
 }
 \description{
-This module provides comprehensive utility functions for AFL Brownlow Medal data exploration
-and analysis, extracting complex logic from the main exploration script.
-Run Comprehensive Data Exploration
-}
-\details{
 Performs complete exploratory data analysis including quality assessment,
 voting patterns, correlations, team analysis, and temporal patterns.
 }

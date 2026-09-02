@@ -1,12 +1,106 @@
-#' Ensemble Prediction and Optimization Utilities
-#'
-#' This module provides utility functions for optimizing ensemble weights,
-#' combining model predictions, and generating final ensemble predictions.
+# Ensemble Prediction and Optimization Utilities
+#
+# Optimising ensemble weights, combining model predictions, and generating
+# final ensemble predictions.
+#
+# Plain comments, NOT roxygen: as a `#'` block with no object beneath it, this
+# was adopted by whichever function came next, overwriting that function's
+# title and prepending this boilerplate to its description. Caught in review
+# when it corrupted select_ensemble_weight()'s help page.
 
-#' Optimize Ensemble Weights
+#' Select a Two-Model Blend Weight
+#'
+#' @description
+#' Scans a grid of weights and returns the one minimising `metric`. Deliberately
+#' takes probability matrices rather than a `model_results` object: this
+#' function cannot reach for data on its own, so whether the selection is
+#' honest is decided by the caller and is visible at the call site.
+#'
+#' That constraint is the entire point. `optimize_ensemble_weights()` extracts
+#' its own predictions, and in this pipeline those came from a model trained on
+#' the very rows it selected over — see POSTMORTEM-2025.md Sec 5j, where the
+#' contamination drove the weight to the constraint boundary and cost 0.00055
+#' RMSE on the 2025 holdout.
+#'
+#' @param prob_list List of two n x 4 probability matrices, first weighted by
+#'   `w` and second by `1 - w`
+#' @param actual Integer vector of observed votes (0-3), length n
+#' @param match_ids Match identifier per row, needed because IPF normalises
+#'   within a match
+#' @param metric `"rmse_ipf"` (what the datathon scores) or `"mlogloss"`
+#' @param grid Candidate weights for the first model
+#' @param verbose Print the curve
+#'
+#' @return List with `weight` (for the first model), `score`, `metric` and the
+#'   full `curve`
+#' @export
+select_ensemble_weight <- function(prob_list, actual, match_ids,
+                                   metric = c("rmse_ipf", "mlogloss"),
+                                   grid = seq(0, 1, by = 0.05), verbose = TRUE) {
+  metric <- match.arg(metric)
+  stopifnot(length(prob_list) == 2)
+  A <- prob_list[[1]]
+  B <- prob_list[[2]]
+
+  if (!identical(dim(A), dim(B))) {
+    stop(sprintf("Probability matrices differ in shape: %s vs %s.",
+                 paste(dim(A), collapse = "x"), paste(dim(B), collapse = "x")))
+  }
+  if (nrow(A) != length(actual) || nrow(A) != length(match_ids)) {
+    stop(sprintf("Rows disagree: %d probability rows, %d actuals, %d match ids.",
+                 nrow(A), length(actual), length(match_ids)))
+  }
+  if (anyNA(A) || anyNA(B)) stop("Probability matrices must be free of NA.")
+  if (anyNA(actual)) stop("actual must be free of NA; drop unscored rows before selecting.")
+  if (anyNA(match_ids)) stop("match ids must never be missing.")
+
+  score_at <- function(w) {
+    P <- w * A + (1 - w) * B
+    if (metric == "rmse_ipf") {
+      sqrt(mean((normalize_votes_ipf(P, match_ids) - actual)^2))
+    } else {
+      -mean(log(pmax(P[cbind(seq_along(actual), actual + 1L)], 1e-15)))
+    }
+  }
+
+  scores <- vapply(grid, score_at, numeric(1))
+  best <- which.min(scores)
+  curve <- tibble::tibble(weight = grid, score = scores)
+
+  if (verbose) {
+    cat(sprintf("select_ensemble_weight (%s): best w = %.2f, score %.5f\n",
+                metric, grid[best], scores[best]))
+    # A boundary optimum usually means the inputs are contaminated rather than
+    # that one model deserves everything — that is exactly how Sec 5j presented.
+    if (best == 1 || best == length(grid)) {
+      warning(sprintf(paste0("Optimum sits at the edge of the grid (w = %.2f). Check whether the ",
+                             "predictions are genuinely out-of-sample; in-sample rows push the ",
+                             "weight to whichever model has more capacity (Sec 5j)."),
+                      grid[best]), call. = FALSE)
+    }
+  }
+
+  list(weight = grid[best], score = scores[best], metric = metric, curve = curve)
+}
+
+#' Optimize Ensemble Weights (superseded)
 #'
 #' Finds optimal weights for ensemble combination using cross-validation
 #' and multinomial log-loss optimization.
+#'
+#' @description
+#' **Superseded by [select_ensemble_weight()]. Prefer that for new code.**
+#'
+#' Two structural problems, neither fixable without changing this function's
+#' contract. It fetches its own predictions out of `model_results`, so the
+#' caller cannot see — let alone control — whether they are out-of-sample; in
+#' this pipeline they were not (Sec 5j). And it optimises log-loss, which is
+#' not what the datathon scores (Sec 5k). `select_ensemble_weight()` takes
+#' probability matrices and a metric, moving both decisions to the call site.
+#'
+#' Kept because `06_ensemble_predictions.R` still calls it to report what a
+#' contaminated search *would* have chosen, which is a useful contrast to print
+#' beside the honest weight.
 #'
 #' @param model_results List containing results from individual models
 #' @param optimization_metric Metric to optimize ("log_loss", "brier", "accuracy")

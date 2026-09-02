@@ -2,7 +2,7 @@
 % Please edit documentation in R/ensemble_utils.R
 \name{optimize_ensemble_weights}
 \alias{optimize_ensemble_weights}
-\title{Ensemble Prediction and Optimization Utilities}
+\title{Optimize Ensemble Weights (superseded)}
 \usage{
 optimize_ensemble_weights(
   model_results,
@@ -24,9 +24,18 @@ optimize_ensemble_weights(
 List containing optimal weights and performance metrics
 }
 \description{
-This module provides utility functions for optimizing ensemble weights,
-combining model predictions, and generating final ensemble predictions.
-Optimize Ensemble Weights
+**Superseded by [select_ensemble_weight()]. Prefer that for new code.**
+
+Two structural problems, neither fixable without changing this function's
+contract. It fetches its own predictions out of `model_results`, so the
+caller cannot see — let alone control — whether they are out-of-sample; in
+this pipeline they were not (Sec 5j). And it optimises log-loss, which is
+not what the datathon scores (Sec 5k). `select_ensemble_weight()` takes
+probability matrices and a metric, moving both decisions to the call site.
+
+Kept because `06_ensemble_predictions.R` still calls it to report what a
+contaminated search *would* have chosen, which is a useful contrast to print
+beside the honest weight.
 }
 \details{
 Finds optimal weights for ensemble combination using cross-validation

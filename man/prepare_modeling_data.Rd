@@ -2,7 +2,7 @@
 % Please edit documentation in R/model_utils.R
 \name{prepare_modeling_data}
 \alias{prepare_modeling_data}
-\title{Model Utilities for Brownlow Medal Prediction}
+\title{Prepare Data for Modeling}
 \usage{
 prepare_modeling_data(
   features,
@@ -27,11 +27,6 @@ prepare_modeling_data(
 List containing train and test datasets
 }
 \description{
-This file contains utility functions for model training, validation,
-evaluation, and hyperparameter tuning.
-Prepare Data for Modeling
-}
-\details{
 Prepares the feature dataset for machine learning by handling missing values,
 encoding categorical variables, and splitting into train/validation sets
 }

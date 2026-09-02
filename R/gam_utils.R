@@ -1,7 +1,7 @@
-#' GAM Utility Functions for Brownlow Medal Prediction
-#'
-#' This file contains utility functions for GAM data preparation, model building,
-#' and prediction conversion specifically for Brownlow Medal prediction using mgcv.
+# GAM Utility Functions for Brownlow Medal Prediction
+#
+# This file contains utility functions for GAM data preparation, model building,
+# and prediction conversion specifically for Brownlow Medal prediction using mgcv.
 
 #' Prepare GAM Data
 #'

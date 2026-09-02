@@ -2,7 +2,7 @@
 % Please edit documentation in R/feature_selection_utils.R
 \name{analyze_feature_correlations}
 \alias{analyze_feature_correlations}
-\title{Feature Selection and Analysis Utilities}
+\title{Analyze Feature Correlations}
 \usage{
 analyze_feature_correlations(
   features_data,
@@ -28,11 +28,6 @@ analyze_feature_correlations(
 List containing correlation analysis results
 }
 \description{
-This module provides utility functions for feature correlation analysis,
-selection, and multicollinearity removal in the Brownlow Medal prediction pipeline.
-Analyze Feature Correlations
-}
-\details{
 Computes correlations between features and target variable, creates visualizations,
 and returns organized correlation results.
 }

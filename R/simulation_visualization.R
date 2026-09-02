@@ -1,7 +1,7 @@
-#' Visualization Functions for Brownlow Medal Simulation Results
-#'
-#' This file contains functions to create comprehensive visualizations of Monte Carlo
-#' simulation results for Brownlow Medal predictions.
+# Visualization Functions for Brownlow Medal Simulation Results
+#
+# This file contains functions to create comprehensive visualizations of Monte Carlo
+# simulation results for Brownlow Medal predictions.
 
 #' Create Win Probability Bar Chart
 #'

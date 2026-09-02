@@ -1,7 +1,7 @@
-#' Feature Selection and Analysis Utilities
-#'
-#' This module provides utility functions for feature correlation analysis,
-#' selection, and multicollinearity removal in the Brownlow Medal prediction pipeline.
+# Feature Selection and Analysis Utilities
+#
+# This module provides utility functions for feature correlation analysis,
+# selection, and multicollinearity removal in the Brownlow Medal prediction pipeline.
 
 #' Analyze Feature Correlations
 #'
