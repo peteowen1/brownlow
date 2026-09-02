@@ -182,6 +182,14 @@ write_csv(sel_tbl, "analysis/harness/ensemble_weight_walkforward.csv")
 # somebody pasted into the source. A hardcoded constant cannot tell you it has
 # gone stale; this can.
 tuning_now <- readRDS("models/xgboost_tuning_results.rds")
+prod_seed_provenance <- attr(xgbp, "seed_provenance")
+if (is.null(prod_seed_provenance)) {
+  # Not a hypothetical gap: results/xgboost_probabilities.rds predates the
+  # attribute this script now reads, or came from a version of 05 that never
+  # set it. Recording NULL rather than guessing lets 06 decide what "unknown"
+  # should mean instead of this script silently assuming single-seed.
+  cat("WARNING: results/xgboost_probabilities.rds carries no seed_provenance -- rerun 05.\n")
+}
 saveRDS(list(
   xgb_weight = w_star,
   gam_weight = 1 - w_star,
@@ -192,7 +200,13 @@ saveRDS(list(
   derived_at = format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
   tuning_provenance = tuning_now$provenance,
   tuning_params = tuning_now$best_params[c("max_depth", "eta", "subsample", "colsample_bytree")],
-  tuning_nrounds = tuning_now$best_iteration
+  tuning_nrounds = tuning_now$best_iteration,
+  # What this script evaluated AGAINST -- the production probabilities it just
+  # read for the "apply once to 2025" comparison above. 06 compares this to
+  # what it itself loads, so a change in HOW predictions are produced (seed
+  # averaging added or its seed count changed) is caught, not just a change in
+  # hyperparameters or rounds.
+  production_seed_provenance = prod_seed_provenance
 ), "models/ensemble_weight_walkforward.rds")
 
 cat("\nwritten: analysis/harness/ensemble_weight_walkforward.csv\n")

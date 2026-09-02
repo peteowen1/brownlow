@@ -3,6 +3,23 @@
 This file starts at 0.2.0. Earlier versions are documented in the commit
 history and in `POSTMORTEM-2025.md`.
 
+# brownlow 0.2.3
+
+2025 holdout RMSE 0.35546 -> 0.35530.
+
+* Production model averaged over 5 seeds instead of a single `set.seed(42)`
+  fit. The seed spread was measured at 0.00200 across 10 seeds -- larger than
+  every improvement this project has banked. Averaging removes the lottery and
+  beats the expected single seed.
+* `06_ensemble_predictions.R`'s staleness check now also detects a change in
+  the *prediction procedure* (e.g. single-seed vs seed-averaged), not just a
+  change in hyperparameters or round count -- the gap seed averaging itself
+  opened, closed the same day.
+* Documented in `NEWS.md` because it matters for reproducibility: the 5-seed
+  noise-floor estimates used throughout this project's history are themselves
+  noisy. A 10-seed estimate gives sd 0.00060, roughly double the 0.00026 used
+  before. See `POSTMORTEM-2025.md` Sec 5p.
+
 # brownlow 0.2.2
 
 2025 holdout RMSE 0.35556 -> 0.35546.

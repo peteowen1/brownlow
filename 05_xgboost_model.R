@@ -20,6 +20,11 @@ devtools::load_all()
 set.seed(42)
 theme_set(theme_minimal())
 
+# Seeds averaged for the shipped probabilities. Five captures most of the
+# available variance reduction — ten buys only a further 0.00002 — at half the
+# fits. Raise it if compute is free; the returns diminish rather than vanish.
+PRODUCTION_SEEDS <- 1:5
+
 ## Configuration parameters ----
 rerun_tuning <- FALSE  # Set to TRUE to force hyperparameter tuning rerun
 
@@ -239,8 +244,14 @@ cat(sprintf(" ✓ Normalized Log-loss: %.3f, Test accuracy: %.1f%% -> %.1f%%, To
 
 # final_model above saw only the train seasons, so its test-season metrics are
 # honest. It must NOT be the model that ships: it has never seen the two most
-# recent completed seasons. production_model is refit on train + test and is the
-# only model used for the probabilities below.
+# recent completed seasons. production_model is refit on train + test.
+#
+# It is used ONLY for xgb.importance() below -- NOT for the shipped
+# probabilities, which come from the 5-seed average further down (Sec 5p).
+# production_model itself carries no explicit seed at this point in the
+# script, so its own fit is exactly the "arbitrary constant" the seed-averaging
+# section exists to stop shipping; it is fine for a gain-ranking, which is
+# stable across seeds, and would not be fine as the submission.
 production_model <- train_production_xgboost(
   train_data = prepared_data$train,
   test_data = prepared_data$test,
@@ -263,10 +274,30 @@ all_data <- bind_rows(prepared_data$train, prepared_data$test, prepared_data$hol
 # Generate XGBoost probabilities for all seasons from the PRODUCTION model.
 # xgboost >= 2.1 returns the multi-class matrix already shaped; the old
 # reshape = TRUE argument has been removed.
-xgb_probs <- as_prob_matrix(
-  predict(production_model, as.matrix(all_data[, prepared_data$feature_cols])),
-  nrow(all_data)
+# Averaged over seeds rather than taken from the single production_model fit.
+# Across 10 seeds the 2025 holdout RMSE ranged 0.35464-0.35664 -- a spread of
+# 0.00200, larger than every improvement this project has banked combined. A
+# single set.seed(42) draw made the submission a lottery. Averaging removes it
+# and beats the expected single seed by 0.00028. See R/seed_averaging.R and
+# POSTMORTEM Sec 5p.
+#
+# production_model above is NOT part of this average and does not ship -- it
+# is a separate, single-arbitrary-seed fit used only for xgb.importance().
+# Caught in review: an earlier version of this comment claimed it was "the
+# first of the averaged fits", which was false and hid the exact seed-lottery
+# problem this section exists to remove.
+cat(sprintf("Averaging XGBoost probabilities over %d seeds...\n", length(PRODUCTION_SEEDS)))
+seed_avg <- train_seed_averaged_xgboost(
+  train_data   = dplyr::bind_rows(prepared_data$train, prepared_data$test),
+  newdata      = all_data,
+  feature_cols = prepared_data$feature_cols,
+  target_col   = prepared_data$target_col,
+  params       = tuning_results$best_params,
+  nrounds      = tuning_results$best_iteration,
+  seeds        = PRODUCTION_SEEDS,
+  verbose      = TRUE
 )
+xgb_probs <- seed_avg$prob_matrix
 
 # Apply probability normalization to ensure 6 votes per match
 cat("Normalizing XGBoost probabilities...\n")
@@ -287,6 +318,15 @@ xgboost_prob_df <- all_data %>%
   mutate(
     xgboost_expected_votes = xgboost_prob_0 * 0 + xgboost_prob_1 * 1 + xgboost_prob_2 * 2 + xgboost_prob_3 * 3
   )
+
+# Stamp how these probabilities were produced. Without this, 06's staleness
+# check compares hyperparameters and round count but has no way to know the
+# PROCEDURE changed -- it would silently accept a weight derived against a
+# single-fit model now that production averages over PRODUCTION_SEEDS.
+attr(xgboost_prob_df, "seed_provenance") <- list(
+  n_seeds = length(PRODUCTION_SEEDS),
+  seeds   = PRODUCTION_SEEDS
+)
 
 # Save XGBoost probabilities
 saveRDS(xgboost_prob_df, "results/xgboost_probabilities.rds")

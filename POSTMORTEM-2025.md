@@ -1065,6 +1065,88 @@ table is the right diagnosis of where the model is *wrong*, and the wrong guide
 to where the score is *available*. Those are different questions and this
 document has conflated them.
 
+## 5o. Match-relative composites, for 2026 shift robustness — adopted on reasoning
+
+`R/match_relative_features.R`, wired into `02_base_feature_engineering.R`.
+Votes are allocated within a match — one 3, one 2, one 1 among 46 players —
+but the model was reading absolute levels. `supercoach_score` (13.5% of gain)
+and `afl_fantasy_score` (5.4%) are absolute scores from **fixed-weight
+formulas**: AFL Fantasy scores hitouts, and the centre bounce is gone in 2026,
+so ruck scores fall mechanically without any player changing. A model trained
+on 2015-2025 levels reads a 2026 score of 105 as the thing it always was; a
+rank within the match does not care if the league shifts. `coaches_votes`
+(35.9%, the largest feature) is already immune — a fixed 5-4-3-2-1 per-match
+allocation is rank-like by construction.
+
+**What it actually bought:** harness (XGBoost alone, 5 seeds) showed 0.35600
+vs 0.35642, -0.00041 on a 0.00052 bar. Shipped end to end: 0.35546 vs 0.35556,
+**-0.00010**. The harness gain largely disappeared in the ensemble — the full
+chain also re-selected rounds and re-derived the weight, and the GAM absorbed
+most of the benefit. This is stated plainly because the recommendation quoted
+the larger number.
+
+Against it: the 2024 validation single fit was slightly worse (0.35898 vs
+0.35820). For it: not worse where it counts, seed variance fell rather than
+rose, it touches every row rather than a rare profile (§5n), and the 2026
+rationale cannot be tested until 2026 data exists. **Adopted on reasoning, not
+evidence.** Reverting is one line in `02` plus a chain rerun.
+
+## 5p. The production model was a single seed — and every noise floor in this
+##     document understated the uncertainty
+
+`05_xgboost_model.R` trained one model at `set.seed(42)`. Measured across 10
+seeds on the 2025 holdout: **sd 0.00060, range 0.35464-0.35664 — a spread of
+0.00200.** That is larger than every improvement this project has banked
+combined (§5g 0.00042, §5j 0.00055, §5k 0.00042). Whether the arbitrary
+constant happened to be a lucky number mattered more than any modelling
+decision made about it.
+
+`R/seed_averaging.R` (`train_seed_averaged_xgboost()`) fits 5 seeds and
+averages the probability matrices — not the post-IPF votes, since IPF is a
+nonlinear normalisation and an averaged probability matrix is still a valid
+input to it. This beats the honest comparison, the mean of the individual
+seeds, not a cherry-picked one:
+
+| seeds | averaged | mean single | gain |
+|---:|---:|---:|---:|
+| 2 | 0.35495 | 0.35511 | -0.00016 |
+| 3 | 0.35520 | 0.35542 | -0.00022 |
+| 5 | 0.35533 | 0.35559 | -0.00026 |
+| 10 | 0.35554 | 0.35581 | -0.00028 |
+
+Diminishing, as variance reduction should be — shipping 5, since 10 buys a
+further 0.00002 for double the fits. Verified end to end: **0.35530**, was
+0.35546.
+
+**Every noise floor quoted earlier in this document is understated.** §5a's
+sd≈0.0004 and the 0.00025-0.00052 pooled figures in §5g/5j/5k all came from
+5-seed estimates, and an sd from 5 draws is itself poorly estimated — 10 seeds
+on the current model gives 0.00060, not ~0.00026. The real decidability bar is
+nearer **0.0012 than 0.0005**. So the three measurement fixes reported as
+landing at "76-100% of the bar" were actually at roughly **35-40%** of a
+correctly estimated one.
+
+None of the three adoption decisions change: each was made on derivation —
+which config's construction was sound — rather than on the measurement
+clearing a bar. But the numbers were described as more suggestive than they
+were, repeatedly, and that should be discounted accordingly when reading §5g,
+§5j and §5k.
+
+**Two things left asymmetric, stated rather than hidden.** The walk-forward
+weight-selection arms in `analysis/ensemble_weight_walkforward.R` are still
+single-seed while production averages five — refining that would cost ~45
+minutes to move a weight whose curve is flat across 0.30-0.55, so it is
+second-order. And `06_ensemble_predictions.R`'s staleness check originally
+compared only hyperparameters and round count, which cannot see a change to
+the *prediction procedure* — it would have silently accepted a weight derived
+against a single fit now that production averages. Closed the same day: `05`
+stamps `xgboost_probabilities.rds` with `seed_provenance` (n_seeds, seeds),
+`ensemble_weight_walkforward.R` captures it into the weight artifact, and `06`
+compares what it just loaded against what the weight was evaluated against.
+Verified: five synthetic cases (matching provenance, missing-vs-present,
+seed-count change, seed-set change) all resolve to the correct verdict, and a
+full chain rerun with genuinely consistent stamps produced no false drift.
+
 ## 6. Codebase review
 
 28 files, 13,842 lines in `R/`, 173 exported functions.
