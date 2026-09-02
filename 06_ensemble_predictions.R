@@ -133,26 +133,43 @@ cat(sprintf("✓ GAM probabilities loaded: %d rows\n", nrow(gam_prob_df)))
 # never fitted on it: 0.35647 against 0.35702 for the in-sample-selected
 # weight that used to ship -- worth 0.00055.
 #
-# PROVENANCE, because a hardcoded constant justified only by a comment rots:
-# 0.40 was selected at 18:52 on 2026-09-02, against the honest hyperparameters
-# adopted at 16:42 that same day (depth 4, eta 0.025 -- provenance$tuned_on in
-# models/xgboost_tuning_results.rds) and the stage-05 probabilities regenerated
-# from them at 16:47. Selection and production therefore agree on the model.
-# ANY re-tune, feature change, or 05 rerun invalidates this number until
-# analysis/ensemble_weight_walkforward.R is run again. Corroborating figures
-# for the 2025 comparison are in analysis/harness/ensemble_weight_grid.csv
-# (w=0.40 -> 0.356466, w=1.00 -> 0.357712).
+# The weight is a DERIVED ARTIFACT, not a constant in this file. It is produced
+# by analysis/ensemble_weight_walkforward.R and carries the provenance of the
+# hyperparameters and round count it was selected against, so a stale weight
+# announces itself instead of sitting here looking authoritative.
 #
-# Set USE_WALKFORWARD_WEIGHT <- FALSE to fall back to the old behaviour.
+# Set USE_WALKFORWARD_WEIGHT <- FALSE to fall back to the in-sample search.
 USE_WALKFORWARD_WEIGHT <- TRUE
-WALKFORWARD_XGB_WEIGHT <- 0.40
+WALKFORWARD_WEIGHT_FILE <- "models/ensemble_weight_walkforward.rds"
 
 ensemble_weights_values <- ensemble_weights$weights
 if (USE_WALKFORWARD_WEIGHT) {
-  xgb_weight <- WALKFORWARD_XGB_WEIGHT
-  gam_weight <- 1 - WALKFORWARD_XGB_WEIGHT
-  cat(sprintf("Ensemble weights (walk-forward, Sec 5j): XGBoost=%.3f, GAM=%.3f  [in-sample search wanted %.3f]\n",
-              xgb_weight, gam_weight, ensemble_weights_values[1]))
+  if (!file.exists(WALKFORWARD_WEIGHT_FILE)) {
+    stop(sprintf(paste0("%s not found. Run analysis/ensemble_weight_walkforward.R first, ",
+                        "or set USE_WALKFORWARD_WEIGHT <- FALSE to accept the in-sample ",
+                        "weight (contaminated -- POSTMORTEM Sec 5j)."), WALKFORWARD_WEIGHT_FILE))
+  }
+  wf <- readRDS(WALKFORWARD_WEIGHT_FILE)
+  xgb_weight <- wf$xgb_weight
+  gam_weight <- wf$gam_weight
+
+  # Staleness check: the weight was fitted against a specific booster. If the
+  # hyperparameters or round count have moved since, it is describing a model
+  # that no longer exists.
+  tuning_now <- readRDS("models/xgboost_tuning_results.rds")
+  if (!identical(wf$tuning_nrounds, tuning_now$best_iteration) ||
+      !identical(wf$tuning_params$max_depth, tuning_now$best_params$max_depth) ||
+      !identical(wf$tuning_params$eta, tuning_now$best_params$eta)) {
+    warning(sprintf(paste0("Ensemble weight was derived %s against depth=%s eta=%s nrounds=%s, ",
+                           "but the current tuning is depth=%s eta=%s nrounds=%s. ",
+                           "Rerun analysis/ensemble_weight_walkforward.R."),
+                    wf$derived_at, wf$tuning_params$max_depth, wf$tuning_params$eta,
+                    wf$tuning_nrounds, tuning_now$best_params$max_depth,
+                    tuning_now$best_params$eta, tuning_now$best_iteration), call. = FALSE)
+  }
+
+  cat(sprintf("Ensemble weights (walk-forward %s, Sec 5j): XGBoost=%.3f, GAM=%.3f  [in-sample search wanted %.3f]\n",
+              wf$derived_at, xgb_weight, gam_weight, ensemble_weights_values[1]))
 } else {
   xgb_weight <- ensemble_weights_values[1]
   gam_weight <- ensemble_weights_values[2]

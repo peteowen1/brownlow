@@ -80,8 +80,11 @@ walk_forward_season <- function(S) {
   # ---- XGBoost, trained on < S -----------------------------------------------
   tr <- enh_all %>% dplyr::filter(season < S)
   te <- enh_all %>% dplyr::filter(season == S)
+  # Select rounds the same way production does, on the scored metric, or the
+  # weight would be fitted to a booster trained differently from the one it
+  # will be blended with (POSTMORTEM Sec 5k).
   rounds <- optimal_nrounds(tr, xgb_feats, target, tuning$best_params,
-                            max_rounds = 600, early_stopping_rounds = 40, verbose = TRUE)$nrounds
+                            max_rounds = 2000, metric = "rmse_ipf", verbose = TRUE)$nrounds
   set.seed(1)
   m <- xgboost::xgb.train(tuning$best_params,
                           xgboost::xgb.DMatrix(as.matrix(tr[, xgb_feats]), label = tr[[target]]),
@@ -168,4 +171,24 @@ for (lbl_w in list(c("walk-forward selected", w_star), c("ships today", 0.858),
 }
 
 write_csv(sel_tbl, "analysis/harness/ensemble_weight_walkforward.csv")
+
+# Persist the weight as a derived artifact with its provenance, so
+# 06_ensemble_predictions.R reads a number this script produced rather than one
+# somebody pasted into the source. A hardcoded constant cannot tell you it has
+# gone stale; this can.
+tuning_now <- readRDS("models/xgboost_tuning_results.rds")
+saveRDS(list(
+  xgb_weight = w_star,
+  gam_weight = 1 - w_star,
+  selected_on = "walk-forward 2023-24 (season S scored by models trained on < S)",
+  selection_metric = "rmse_ipf",
+  selection_rows = nrow(wf),
+  curve = sel_tbl,
+  derived_at = format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+  tuning_provenance = tuning_now$provenance,
+  tuning_params = tuning_now$best_params[c("max_depth", "eta", "subsample", "colsample_bytree")],
+  tuning_nrounds = tuning_now$best_iteration
+), "models/ensemble_weight_walkforward.rds")
+
 cat("\nwritten: analysis/harness/ensemble_weight_walkforward.csv\n")
+cat("written: models/ensemble_weight_walkforward.rds (read by 06)\n")
