@@ -185,9 +185,15 @@ if (USE_WALKFORWARD_WEIGHT) {
   # was evaluated against to what was just loaded for THIS run.
   now_provenance <- attr(xgboost_prob_df, "seed_provenance")
   then_provenance <- wf$production_seed_provenance
-  if (!identical(then_provenance, now_provenance)) {
-    fmt <- function(p) if (is.null(p)) "unknown/unstamped" else sprintf("%d seed(s) %s",
-                                                                        p$n_seeds, paste(p$seeds, collapse = ","))
+  fmt <- function(p) if (is.null(p)) "unknown/unstamped" else sprintf("%d seed(s) %s",
+                                                                      p$n_seeds, paste(p$seeds, collapse = ","))
+  # NOT raw identical(): PRODUCTION_SEEDS is 1:5 today (integer), but if it is
+  # ever rewritten as c(1,2,3,4,5) or seq(1,5) (double) with the same actual
+  # seeds, identical() on the list would return FALSE and this would stop on a
+  # representation difference rather than a real one. Caught in review.
+  # Compare by rendered string instead -- the same values format identically
+  # regardless of storage type, and this IS the string shown in the error.
+  if (!identical(fmt(then_provenance), fmt(now_provenance))) {
     drift <- c(drift, sprintf("prediction procedure %s -> %s", fmt(then_provenance), fmt(now_provenance)))
   }
 

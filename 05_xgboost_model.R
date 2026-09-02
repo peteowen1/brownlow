@@ -244,8 +244,14 @@ cat(sprintf(" ✓ Normalized Log-loss: %.3f, Test accuracy: %.1f%% -> %.1f%%, To
 
 # final_model above saw only the train seasons, so its test-season metrics are
 # honest. It must NOT be the model that ships: it has never seen the two most
-# recent completed seasons. production_model is refit on train + test and is the
-# only model used for the probabilities below.
+# recent completed seasons. production_model is refit on train + test.
+#
+# It is used ONLY for xgb.importance() below -- NOT for the shipped
+# probabilities, which come from the 5-seed average further down (Sec 5p).
+# production_model itself carries no explicit seed at this point in the
+# script, so its own fit is exactly the "arbitrary constant" the seed-averaging
+# section exists to stop shipping; it is fine for a gain-ranking, which is
+# stable across seeds, and would not be fine as the submission.
 production_model <- train_production_xgboost(
   train_data = prepared_data$train,
   test_data = prepared_data$test,
@@ -275,8 +281,11 @@ all_data <- bind_rows(prepared_data$train, prepared_data$test, prepared_data$hol
 # and beats the expected single seed by 0.00028. See R/seed_averaging.R and
 # POSTMORTEM Sec 5p.
 #
-# production_model is still trained above and still ships: it is the object
-# used for variable importance, and it is the first of the averaged fits.
+# production_model above is NOT part of this average and does not ship -- it
+# is a separate, single-arbitrary-seed fit used only for xgb.importance().
+# Caught in review: an earlier version of this comment claimed it was "the
+# first of the averaged fits", which was false and hid the exact seed-lottery
+# problem this section exists to remove.
 cat(sprintf("Averaging XGBoost probabilities over %d seeds...\n", length(PRODUCTION_SEEDS)))
 seed_avg <- train_seed_averaged_xgboost(
   train_data   = dplyr::bind_rows(prepared_data$train, prepared_data$test),
