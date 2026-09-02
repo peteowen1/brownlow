@@ -119,11 +119,36 @@ cat(sprintf("✓ XGBoost probabilities loaded: %d rows\n", nrow(xgboost_prob_df)
 cat(sprintf("✓ GAM probabilities loaded: %d rows\n", nrow(gam_prob_df)))
 
 # Combine using ensemble weights
-ensemble_weights_values <- ensemble_weights$weights
-xgb_weight <- ensemble_weights_values[1]
-gam_weight <- ensemble_weights_values[2]
+#
+# optimize_ensemble_weights() above fits the blend on the models' stored
+# 2023-24 probabilities -- but stage 05 produces those from a model trained on
+# 2015-2024, so it is selecting on rows the booster memorised. XGBoost scores
+# 0.3357 there against 0.3577 out of sample while the GAM barely moves, so the
+# search runs monotonically to the 0.9 cap and only the cap stops it going to
+# 1.0. See POSTMORTEM-2025.md Sec 5j.
+#
+# WALKFORWARD_XGB_WEIGHT is chosen instead on genuinely out-of-sample
+# predictions (2023 scored by models trained on < 2023, 2024 on < 2024) by
+# analysis/ensemble_weight_walkforward.R. Measured on the 2025 holdout, weight
+# never fitted on it: 0.35647 against 0.35702 for the in-sample-selected
+# weight that used to ship -- worth 0.00055.
+#
+# Set USE_WALKFORWARD_WEIGHT <- FALSE to fall back to the old behaviour.
+USE_WALKFORWARD_WEIGHT <- TRUE
+WALKFORWARD_XGB_WEIGHT <- 0.40
 
-cat(sprintf("Ensemble weights: XGBoost=%.3f, GAM=%.3f\n", xgb_weight, gam_weight))
+ensemble_weights_values <- ensemble_weights$weights
+if (USE_WALKFORWARD_WEIGHT) {
+  xgb_weight <- WALKFORWARD_XGB_WEIGHT
+  gam_weight <- 1 - WALKFORWARD_XGB_WEIGHT
+  cat(sprintf("Ensemble weights (walk-forward, Sec 5j): XGBoost=%.3f, GAM=%.3f  [in-sample search wanted %.3f]\n",
+              xgb_weight, gam_weight, ensemble_weights_values[1]))
+} else {
+  xgb_weight <- ensemble_weights_values[1]
+  gam_weight <- ensemble_weights_values[2]
+  cat(sprintf("Ensemble weights (in-sample search, LEAKY -- see Sec 5j): XGBoost=%.3f, GAM=%.3f\n",
+              xgb_weight, gam_weight))
+}
 
 # Create ensemble probabilities by weighted combination.
 #
