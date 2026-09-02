@@ -3,6 +3,24 @@
 This file starts at 0.2.0. Earlier versions are documented in the commit
 history and in `POSTMORTEM-2025.md`.
 
+# brownlow 0.2.1
+
+Behaviour-preserving: the selected blend weight and the shipped predictions are
+unchanged (verified at w = 0.55, 2025 holdout RMSE 0.35556).
+
+* New `select_ensemble_weight()`, taking probability matrices, actuals and
+  match ids rather than a `model_results` object, so whether a selection is
+  out-of-sample is decided and visible at the call site. Defaults to
+  `rmse_ipf`. Warns when the optimum lands on a grid edge, which usually
+  indicates contaminated inputs rather than a genuine verdict.
+* `optimize_ensemble_weights()` documented as superseded. Retained because
+  `06_ensemble_predictions.R` still calls it to report what a contaminated
+  search would have chosen, as a contrast to the honest weight.
+* Fixed nine corrupted help pages. A file-level `#'` block with no object
+  beneath it is adopted by roxygen into the next function, overwriting its
+  title and prepending boilerplate to its description. Eight of the nine were
+  pre-existing.
+
 # brownlow 0.2.0
 
 A minor rather than patch bump: this release changes what the shipped model
