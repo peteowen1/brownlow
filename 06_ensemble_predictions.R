@@ -177,6 +177,20 @@ if (USE_WALKFORWARD_WEIGHT) {
       drift <- c(drift, sprintf("%s %s -> %s", p, wf$tuning_params[[p]], tuning_now$best_params[[p]]))
     }
   }
+
+  # Hyperparameters and rounds are not the only thing that can change under
+  # the weight. The PROCEDURE that turns them into predictions can too: seed
+  # averaging (Sec 5p) changed nothing the checks above look at, yet it moved
+  # the weight 0.55 -> 0.35 when actually re-derived. Compare what the weight
+  # was evaluated against to what was just loaded for THIS run.
+  now_provenance <- attr(xgboost_prob_df, "seed_provenance")
+  then_provenance <- wf$production_seed_provenance
+  if (!identical(then_provenance, now_provenance)) {
+    fmt <- function(p) if (is.null(p)) "unknown/unstamped" else sprintf("%d seed(s) %s",
+                                                                        p$n_seeds, paste(p$seeds, collapse = ","))
+    drift <- c(drift, sprintf("prediction procedure %s -> %s", fmt(then_provenance), fmt(now_provenance)))
+  }
+
   if (length(drift) > 0) {
     stop(sprintf(paste0("Ensemble weight is STALE. Derived %s against a model that has since ",
                         "changed: %s. Rerun analysis/ensemble_weight_walkforward.R, or set ",

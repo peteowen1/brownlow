@@ -310,6 +310,15 @@ xgboost_prob_df <- all_data %>%
     xgboost_expected_votes = xgboost_prob_0 * 0 + xgboost_prob_1 * 1 + xgboost_prob_2 * 2 + xgboost_prob_3 * 3
   )
 
+# Stamp how these probabilities were produced. Without this, 06's staleness
+# check compares hyperparameters and round count but has no way to know the
+# PROCEDURE changed -- it would silently accept a weight derived against a
+# single-fit model now that production averages over PRODUCTION_SEEDS.
+attr(xgboost_prob_df, "seed_provenance") <- list(
+  n_seeds = length(PRODUCTION_SEEDS),
+  seeds   = PRODUCTION_SEEDS
+)
+
 # Save XGBoost probabilities
 saveRDS(xgboost_prob_df, "results/xgboost_probabilities.rds")
 write_csv(xgboost_prob_df, "results/xgboost_probabilities.csv")
