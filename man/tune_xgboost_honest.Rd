@@ -13,6 +13,9 @@ tune_xgboost_honest(
   n_folds = 4,
   max_rounds = 1500,
   early_stopping_rounds = 50,
+  metric = c("mlogloss", "rmse_ipf"),
+  match_id_col = "match_id",
+  round_grid = NULL,
   seed = 1,
   verbose = TRUE
 )
@@ -30,20 +33,37 @@ tune_xgboost_honest(
 
 \item{n_folds}{Number of expanding-window folds from `create_time_aware_cv()`}
 
-\item{max_rounds}{Upper bound per fold's early-stopped fit}
+\item{max_rounds}{Upper bound per fold's fit}
 
-\item{early_stopping_rounds}{Rounds without improvement before stopping}
+\item{early_stopping_rounds}{Rounds without improvement before stopping
+(`metric = "mlogloss"` only)}
+
+\item{metric}{Selection criterion. `"mlogloss"` ranks candidates by mean
+fold log-loss. `"rmse_ipf"` ranks them by mean fold RMSE after IPF — what
+the datathon scores (POSTMORTEM-2025.md Sec 5k).}
+
+\item{match_id_col}{Column identifying the match, required by `"rmse_ipf"`}
+
+\item{round_grid}{Truncations scanned per fold under `"rmse_ipf"`}
 
 \item{seed}{RNG seed for the random draws}
 
 \item{verbose}{Print progress}
 }
 \value{
-List with `best_params`, `best_score` (mean fold mlogloss),
-  `best_nrounds` (median across folds, a starting point —
+List with `best_params`, `best_score` (mean fold score under
+  `metric`), `best_nrounds` (median across folds, a starting point —
   `optimal_nrounds()` should still be used per evaluation season), and
   `all_candidates` (every candidate tried, for inspection)
 }
 \description{
 Tune XGBoost Hyperparameters on Honest Expanding-Window Folds
 }
+\section{Cost}{
+
+`"rmse_ipf"` cannot early-stop — the RMSE optimum sits well past where
+log-loss would have halted — so every fold trains to `max_rounds`. That is
+roughly `n_candidates * n_folds` full fits plus IPF scans, i.e. hours rather
+than minutes. Budget accordingly and run it in the background.
+}
+

@@ -893,6 +893,52 @@ Note the structure is still right: `multi:softprob` with IPF is a legitimate
 way to produce a votes regression, because the 3-2-1 constraint needs a
 probability matrix to enforce. The objection is only to selecting on mlogloss.
 
+### 5k.1 Resolved — it matters for ROUNDS, not for HYPERPARAMETERS
+
+Both halves have now been measured, and they came out opposite ways. That
+split is the useful part of this section.
+
+**Rounds: the metric mattered a lot.** Validating on 2024, mlogloss bottoms at
+**400** rounds then climbs steadily (0.17085 -> 0.17874 by 2500), while
+RMSE-after-IPF keeps improving to **~1100-1200** and is flat across 600-1500.
+A 3x error. On the 2025 holdout, 5 seeds: 0.35648 (RMSE-selected) against
+0.35690 (mlogloss-selected), delta -0.00042 on a 0.00055 bar — adopted on
+derivation, not on the measurement. The larger consequence was indirect: the
+round change moved the honest ensemble weight from 0.40 to 0.55, so shipping
+the new rounds with the old weight would have mis-set the blend.
+
+**Hyperparameters: the metric did not matter at all.**
+`analysis/rmse_hyperparameter_search.R` ran an independent 12-candidate search
+over 4 leak-free expanding-window folds ranking on mean fold RMSE-after-IPF —
+79 minutes, since RMSE selection cannot early-stop and every fold trains to
+`max_rounds`. It re-selected **the incumbent's exact parameters**:
+
+| param | mlogloss-tuned | RMSE-tuned |
+|---|---|---|
+| `max_depth` | 4 | 4 |
+| `eta` | 0.025 | 0.025 |
+| `subsample` | 0.8 | 0.8 |
+| `colsample_bytree` | 0.6 | 0.6 |
+
+Head to head on 2025, both arms given RMSE-selected rounds so the comparison
+isolates the hyperparameters: **0.35642 vs 0.35642, delta exactly 0** —
+bit-identical, as it must be for one configuration compared with itself.
+
+The mechanism is worth keeping. `eta` and `max_depth` govern *how* the model
+learns, and both objectives reward learning the same structure. Where they
+diverge is *when to stop* — the point past which the probabilities decalibrate
+while the IPF'd point predictions keep improving. It is a stopping-rule
+disagreement, not a model-shape one. So the fix belongs in
+`optimal_nrounds()`, which now takes `metric = "rmse_ipf"`, and
+`tune_xgboost_honest()` can safely keep ranking on mlogloss (though it accepts
+`metric` too).
+
+Incidental but useful: XGBoost alone at 1100 rounds scores **0.35642** on
+2025, against **0.35556** for the shipped ensemble. The GAM is worth
+**0.00086** out of sample — the largest single contribution in the stack, and
+the strongest version yet of Sec 5b's "keep the GAM". Sec 5j's contaminated
+in-sample search had been reporting that contribution as 0.0002.
+
 ## 5l. 2026 changes to the competition and the season — researched 2026-09-02
 
 **Competition — no structural change from 2025.** Full season, per-match,

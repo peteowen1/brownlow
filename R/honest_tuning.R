@@ -25,19 +25,41 @@
 #' @param param_grid Named list of candidate values per hyperparameter
 #' @param n_candidates Number of random draws from `param_grid`
 #' @param n_folds Number of expanding-window folds from `create_time_aware_cv()`
-#' @param max_rounds Upper bound per fold's early-stopped fit
+#' @param max_rounds Upper bound per fold's fit
 #' @param early_stopping_rounds Rounds without improvement before stopping
+#'   (`metric = "mlogloss"` only)
+#' @param metric Selection criterion. `"mlogloss"` ranks candidates by mean
+#'   fold log-loss. `"rmse_ipf"` ranks them by mean fold RMSE after IPF — what
+#'   the datathon scores (POSTMORTEM-2025.md Sec 5k).
+#' @param match_id_col Column identifying the match, required by `"rmse_ipf"`
+#' @param round_grid Truncations scanned per fold under `"rmse_ipf"`
 #' @param seed RNG seed for the random draws
 #' @param verbose Print progress
 #'
-#' @return List with `best_params`, `best_score` (mean fold mlogloss),
-#'   `best_nrounds` (median across folds, a starting point —
+#' @section Cost:
+#' `"rmse_ipf"` cannot early-stop — the RMSE optimum sits well past where
+#' log-loss would have halted — so every fold trains to `max_rounds`. That is
+#' roughly `n_candidates * n_folds` full fits plus IPF scans, i.e. hours rather
+#' than minutes. Budget accordingly and run it in the background.
+#'
+#' @return List with `best_params`, `best_score` (mean fold score under
+#'   `metric`), `best_nrounds` (median across folds, a starting point —
 #'   `optimal_nrounds()` should still be used per evaluation season), and
 #'   `all_candidates` (every candidate tried, for inspection)
 #' @export
 tune_xgboost_honest <- function(train_data, feature_cols, target_col, param_grid,
                                 n_candidates = 20, n_folds = 4, max_rounds = 1500,
-                                early_stopping_rounds = 50, seed = 1, verbose = TRUE) {
+                                early_stopping_rounds = 50,
+                                metric = c("mlogloss", "rmse_ipf"),
+                                match_id_col = "match_id", round_grid = NULL,
+                                seed = 1, verbose = TRUE) {
+
+  metric <- match.arg(metric)
+  if (metric == "rmse_ipf" && !match_id_col %in% names(train_data)) {
+    stop(sprintf("metric='rmse_ipf' needs a '%s' column; IPF normalises within a match.",
+                 match_id_col))
+  }
+  if (is.null(round_grid)) round_grid <- seq(200, max_rounds, by = 100)
 
   folds <- create_time_aware_cv(train_data, target_col = target_col,
                                 feature_cols = feature_cols, n_folds = n_folds)
@@ -66,20 +88,35 @@ tune_xgboost_honest <- function(train_data, feature_cols, target_col, param_grid
       tr <- train_data[folds[[f]]$train, ]
       va <- train_data[folds[[f]]$validation, ]
       dtr <- xgboost::xgb.DMatrix(as.matrix(tr[, feature_cols]), label = tr[[target_col]])
-      dva <- xgboost::xgb.DMatrix(as.matrix(va[, feature_cols]), label = va[[target_col]])
 
-      m <- xgboost::xgb.train(params = params, data = dtr, nrounds = max_rounds,
-                              evals = list(validation = dva),
-                              early_stopping_rounds = early_stopping_rounds, verbose = 0)
-      log <- as.data.frame(attributes(m)$evaluation_log)
-      score_col <- grep("^validation", names(log), value = TRUE)[1]
-      best <- which.min(log[[score_col]])
-      fold_scores[f] <- log[[score_col]][best]
-      fold_rounds[f] <- best
+      if (metric == "rmse_ipf") {
+        # No early stopping: the RMSE optimum lies past where log-loss halts.
+        m <- xgboost::xgb.train(params = params, data = dtr, nrounds = max_rounds, verbose = 0)
+        vax <- as.matrix(va[, feature_cols])
+        y_va <- va[[target_col]]
+        grid <- sort(unique(pmin(round_grid, max_rounds)))
+        s <- vapply(grid, function(k) {
+          pm <- as_prob_matrix(stats::predict(m, vax, iterationrange = c(1, k)), nrow(va))
+          sqrt(mean((normalize_votes_ipf(pm, va[[match_id_col]]) - y_va)^2))
+        }, numeric(1))
+        best <- which.min(s)
+        fold_scores[f] <- s[best]
+        fold_rounds[f] <- grid[best]
+      } else {
+        dva <- xgboost::xgb.DMatrix(as.matrix(va[, feature_cols]), label = va[[target_col]])
+        m <- xgboost::xgb.train(params = params, data = dtr, nrounds = max_rounds,
+                                evals = list(validation = dva),
+                                early_stopping_rounds = early_stopping_rounds, verbose = 0)
+        log <- as.data.frame(attributes(m)$evaluation_log)
+        score_col <- grep("^validation", names(log), value = TRUE)[1]
+        best <- which.min(log[[score_col]])
+        fold_scores[f] <- log[[score_col]][best]
+        fold_rounds[f] <- best
+      }
     }
 
     mean_score <- mean(fold_scores)
-    if (verbose) cat(sprintf("  candidate %2d/%d: mean mlogloss %.5f\n", i, length(candidates), mean_score))
+    if (verbose) cat(sprintf("  candidate %2d/%d: mean %s %.5f\n", i, length(candidates), metric, mean_score))
     tibble::tibble(candidate = i, mean_score = mean_score,
                   median_rounds = stats::median(fold_rounds), params = list(params))
   })
@@ -87,7 +124,7 @@ tune_xgboost_honest <- function(train_data, feature_cols, target_col, param_grid
 
   best_idx <- which.min(results$mean_score)
   if (verbose) {
-    cat(sprintf("\nbest: candidate %d, mean mlogloss %.5f\n", best_idx, results$mean_score[best_idx]))
+    cat(sprintf("\nbest: candidate %d, mean %s %.5f\n", best_idx, metric, results$mean_score[best_idx]))
     print(results$params[[best_idx]][names(param_grid)])
   }
 
