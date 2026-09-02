@@ -11,7 +11,8 @@ nrounds_cache_key(
   params,
   val_season,
   max_rounds,
-  early_stopping_rounds
+  early_stopping_rounds,
+  metric = "mlogloss"
 )
 }
 \description{

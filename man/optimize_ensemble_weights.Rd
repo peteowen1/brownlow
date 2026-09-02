@@ -32,3 +32,29 @@ Optimize Ensemble Weights
 Finds optimal weights for ensemble combination using cross-validation
 and multinomial log-loss optimization.
 }
+\section{Do not trust this function's output on production predictions}{
+
+It fits the blend on whatever predictions `model_results` carries. In this
+pipeline stage `05` retrains the production model on 2015-2024 and then
+writes probabilities for every row, so the 2023-24 rows this function
+selects on are **in-sample for XGBoost**. The contamination is asymmetric —
+a several-hundred-round booster memorises its training rows while a shrunk
+GAM does not — so selection runs monotonically to the XGBoost cap:
+
+| model alone | 2023-24 (in-sample) | 2025 (out-of-sample) |
+|---|---|---|
+| XGBoost | 0.33565 | 0.35771 |
+| GAM | 0.36177 | 0.35805 |
+
+Selecting on honest walk-forward predictions instead gives `w_xgb = 0.40`
+against this function's 1.00, worth 0.00055 RMSE on 2025. See
+POSTMORTEM-2025.md Sec 5j and `analysis/ensemble_weight_walkforward.R`.
+`06_ensemble_predictions.R` therefore ignores this result by default.
+
+Two further cautions. The `min`/`max` constraint is **load-bearing** while
+the input stays contaminated — it is the only thing stopping the search
+reaching pure XGBoost — so do not relax it as an "arbitrary limit". And
+`optimization_metric = "log_loss"` is not what the competition scores; it
+scores RMSE (Sec 5k).
+}
+

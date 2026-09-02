@@ -24,11 +24,15 @@
 #'
 #' @keywords internal
 nrounds_cache_key <- function(train_data, feature_cols, target_col, params,
-                              val_season, max_rounds, early_stopping_rounds) {
+                              val_season, max_rounds, early_stopping_rounds,
+                              metric = "mlogloss") {
   param_str <- paste(names(params)[order(names(params))],
                      unlist(params[order(names(params))]), sep = "=", collapse = ",")
   paste(
     param_str,
+    # Without this, a cached mlogloss answer would be served for an rmse_ipf
+    # request — the two disagree by 3x on this data (400 vs 1200 rounds).
+    sprintf("metric=%s", metric),
     sprintf("nfeat=%d", length(feature_cols)),
     sprintf("featsum=%s", substr(rlang::hash(sort(feature_cols)), 1, 12)),
     sprintf("nrow=%d", nrow(train_data)),
@@ -57,18 +61,44 @@ nrounds_cache_key <- function(train_data, feature_cols, target_col, params,
 #' @param val_season Season to validate on; defaults to the most recent in `train_data`
 #' @param max_rounds Upper bound for the search
 #' @param early_stopping_rounds Rounds without improvement before stopping
+#'   (`metric = "mlogloss"` only; the RMSE search scans truncations instead)
+#' @param metric Selection criterion. `"mlogloss"` early-stops on validation
+#'   multinomial log-loss — the historic behaviour. `"rmse_ipf"` selects on
+#'   RMSE after IPF normalisation, which is **what the datathon actually
+#'   scores** (POSTMORTEM-2025.md Sec 5k).
+#' @param match_id_col Column identifying the match, required by `"rmse_ipf"`
+#'   because IPF normalises within a match
+#' @param round_grid Truncations to evaluate under `"rmse_ipf"`; defaults to
+#'   100-step increments up to `max_rounds`
 #' @param cache_file Where to persist results
 #' @param refresh Force a fresh search, ignoring any cached answer
 #' @param verbose Print progress
 #'
-#' @return List with `nrounds`, `score`, `cached` and the `key` used
+#' @section Choosing the metric:
+#' These disagree, and not subtly. Measured 2026-09-02 on the 267-feature data
+#' with the honest hyperparameters, validating on 2024: mlogloss bottoms at
+#' **400** rounds and then climbs steadily (0.17085 -> 0.17874 by 2500), while
+#' RMSE-after-IPF keeps improving to **1200** and is flat across 600-1500. So
+#' log-loss stops the model at a third of the trees the scored metric wants.
+#'
+#' Past ~400 rounds the probability estimates get worse-calibrated while the
+#' IPF'd point predictions keep improving. That is a real trade, not a free
+#' win: anything downstream that consumes the PROBABILITIES rather than the
+#' expected votes — the ensemble blend especially — may be affected, so
+#' re-derive the ensemble weight after changing this.
+#'
+#' @return List with `nrounds`, `score`, `metric`, `cached` and the `key` used
 #' @export
 optimal_nrounds <- function(train_data, feature_cols, target_col, params,
                             val_season = NULL, max_rounds = 2000,
                             early_stopping_rounds = 50,
+                            metric = c("mlogloss", "rmse_ipf"),
+                            match_id_col = "match_id",
+                            round_grid = NULL,
                             cache_file = "models/nrounds_cache.rds",
                             refresh = FALSE, verbose = TRUE) {
 
+  metric <- match.arg(metric)
   if (is.null(val_season)) val_season <- max(train_data$season)
   fit_seasons <- sort(unique(train_data$season[train_data$season < val_season]))
   if (length(fit_seasons) == 0) {
@@ -76,7 +106,7 @@ optimal_nrounds <- function(train_data, feature_cols, target_col, params,
   }
 
   key <- nrounds_cache_key(train_data, feature_cols, target_col, params,
-                           val_season, max_rounds, early_stopping_rounds)
+                           val_season, max_rounds, early_stopping_rounds, metric)
 
   cache <- if (file.exists(cache_file)) readRDS(cache_file) else list()
   if (!refresh && !is.null(cache[[key]])) {
@@ -92,12 +122,74 @@ optimal_nrounds <- function(train_data, feature_cols, target_col, params,
   if (nrow(val) == 0) stop(sprintf("No rows for validation season %s.", val_season))
 
   if (verbose) {
-    cat(sprintf("optimal_nrounds: searching (fit %d-%d, validate %s, max %d)\n",
-                min(fit_seasons), max(fit_seasons), val_season, max_rounds))
+    cat(sprintf("optimal_nrounds: searching on %s (fit %d-%d, validate %s, max %d)\n",
+                metric, min(fit_seasons), max(fit_seasons), val_season, max_rounds))
   }
 
   dfit <- xgboost::xgb.DMatrix(as.matrix(fit[, feature_cols]), label = fit[[target_col]])
   dval <- xgboost::xgb.DMatrix(as.matrix(val[, feature_cols]), label = val[[target_col]])
+
+  if (metric == "rmse_ipf") {
+    if (!match_id_col %in% names(val)) {
+      stop(sprintf("metric='rmse_ipf' needs a '%s' column; IPF normalises within a match.",
+                   match_id_col))
+    }
+    if (anyNA(val[[match_id_col]])) stop("match ids must never be missing.")
+
+    # No early stopping: the whole point is that the RMSE optimum sits well past
+    # where log-loss would have stopped. Train once to max_rounds, then score
+    # truncations via predict(iterationrange=) rather than refitting per point.
+    model <- xgboost::xgb.train(params = params, data = dfit, nrounds = max_rounds, verbose = 0)
+
+    if (is.null(round_grid)) round_grid <- seq(100, max_rounds, by = 100)
+    # pmin() would silently collapse an entirely-out-of-range grid to a single
+    # point at max_rounds, so the "search" would return the ceiling as if it
+    # had been chosen. Fail instead: that is a different search from the one
+    # the caller asked for.
+    if (min(round_grid) > max_rounds) {
+      stop(sprintf("round_grid's minimum (%d) exceeds max_rounds (%d); nothing to search.",
+                   min(round_grid), max_rounds))
+    }
+    round_grid <- sort(unique(pmin(round_grid, max_rounds)))
+    valx <- as.matrix(val[, feature_cols])
+    y_val <- val[[target_col]]
+
+    scores <- vapply(round_grid, function(k) {
+      # iterationrange = c(1, k) uses EXACTLY k trees -- verified empirically on
+      # xgboost 3.2.1.1 against a model trained fresh to k rounds (bit-identical).
+      # Do NOT "fix" this to c(1, k + 1): the upper bound is capped at the rounds
+      # actually trained, so that errors at the top of the grid.
+      pm <- as_prob_matrix(stats::predict(model, valx, iterationrange = c(1, k)), nrow(val))
+      votes <- normalize_votes_ipf(pm, val[[match_id_col]])
+      sqrt(mean((votes - y_val)^2))
+    }, numeric(1))
+
+    best <- which.min(scores)
+    result <- list(nrounds = as.integer(round_grid[best]),
+                   score   = as.numeric(scores[best]),
+                   metric  = "rmse_ipf",
+                   hit_ceiling = round_grid[best] >= max_rounds)
+
+    if (verbose) {
+      cat(sprintf("optimal_nrounds: %d rounds (rmse_ipf %.5f)\n",
+                  result$nrounds, result$score))
+    }
+    # warning(), not cat(): a cat() carries no condition, so it cannot be caught,
+    # never reaches Rscript's "Warning messages:" summary, and is invisible to
+    # anyone grepping a log. Hitting the ceiling means the optimum was never
+    # bracketed — and callers other than analysis/adopt_rmse_rounds.R do not
+    # check for it, including the walk-forward weight derivation.
+    if (isTRUE(result$hit_ceiling)) {
+      warning(sprintf(paste0("optimal_nrounds hit max_rounds (%d) under %s: the optimum was not ",
+                             "bracketed, so this is a ceiling rather than a choice. Raise max_rounds."),
+                      max_rounds, metric), call. = FALSE)
+    }
+
+    cache[[key]] <- result
+    dir.create(dirname(cache_file), showWarnings = FALSE, recursive = TRUE)
+    saveRDS(cache, cache_file)
+    return(c(result, list(cached = FALSE, key = key)))
+  }
 
   model <- xgboost::xgb.train(
     params = params, data = dfit, nrounds = max_rounds,
@@ -123,12 +215,17 @@ optimal_nrounds <- function(train_data, feature_cols, target_col, params,
 
   result <- list(nrounds = as.integer(best),
                  score   = as.numeric(scores[best]),
-                 metric  = score_col)
+                 metric  = score_col,
+                 hit_ceiling = best >= max_rounds)
 
   if (verbose) {
-    cat(sprintf("optimal_nrounds: %d rounds (%s %.5f)%s\n",
-                result$nrounds, result$metric, result$score,
-                if (result$nrounds >= max_rounds) "  [hit max_rounds — raise it]" else ""))
+    cat(sprintf("optimal_nrounds: %d rounds (%s %.5f)\n",
+                result$nrounds, result$metric, result$score))
+  }
+  if (isTRUE(result$hit_ceiling)) {
+    warning(sprintf(paste0("optimal_nrounds hit max_rounds (%d) under %s: the optimum was not ",
+                           "bracketed, so this is a ceiling rather than a choice. Raise max_rounds."),
+                    max_rounds, metric), call. = FALSE)
   }
 
   cache[[key]] <- result

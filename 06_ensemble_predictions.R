@@ -119,11 +119,80 @@ cat(sprintf("✓ XGBoost probabilities loaded: %d rows\n", nrow(xgboost_prob_df)
 cat(sprintf("✓ GAM probabilities loaded: %d rows\n", nrow(gam_prob_df)))
 
 # Combine using ensemble weights
-ensemble_weights_values <- ensemble_weights$weights
-xgb_weight <- ensemble_weights_values[1]
-gam_weight <- ensemble_weights_values[2]
+#
+# optimize_ensemble_weights() above fits the blend on the models' stored
+# 2023-24 probabilities -- but stage 05 produces those from a model trained on
+# 2015-2024, so it is selecting on rows the booster memorised. XGBoost scores
+# 0.3357 there against 0.3577 out of sample while the GAM barely moves, so the
+# search runs monotonically to the 0.9 cap and only the cap stops it going to
+# 1.0. See POSTMORTEM-2025.md Sec 5j.
+#
+# WALKFORWARD_XGB_WEIGHT is chosen instead on genuinely out-of-sample
+# predictions (2023 scored by models trained on < 2023, 2024 on < 2024) by
+# analysis/ensemble_weight_walkforward.R. Measured on the 2025 holdout, weight
+# never fitted on it: 0.35647 against 0.35702 for the in-sample-selected
+# weight that used to ship -- worth 0.00055.
+#
+# The weight is a DERIVED ARTIFACT, not a constant in this file. It is produced
+# by analysis/ensemble_weight_walkforward.R and carries the provenance of the
+# hyperparameters and round count it was selected against, so a stale weight
+# announces itself instead of sitting here looking authoritative.
+#
+# Set USE_WALKFORWARD_WEIGHT <- FALSE to fall back to the in-sample search.
+USE_WALKFORWARD_WEIGHT <- TRUE
+WALKFORWARD_WEIGHT_FILE <- "models/ensemble_weight_walkforward.rds"
 
-cat(sprintf("Ensemble weights: XGBoost=%.3f, GAM=%.3f\n", xgb_weight, gam_weight))
+ensemble_weights_values <- ensemble_weights$weights
+if (USE_WALKFORWARD_WEIGHT) {
+  if (!file.exists(WALKFORWARD_WEIGHT_FILE)) {
+    stop(sprintf(paste0("%s not found. Run analysis/ensemble_weight_walkforward.R first, ",
+                        "or set USE_WALKFORWARD_WEIGHT <- FALSE to accept the in-sample ",
+                        "weight (contaminated -- POSTMORTEM Sec 5j)."), WALKFORWARD_WEIGHT_FILE))
+  }
+  wf <- readRDS(WALKFORWARD_WEIGHT_FILE)
+  xgb_weight <- wf$xgb_weight
+  gam_weight <- wf$gam_weight
+
+  # Staleness check: the weight was fitted against a specific booster. If the
+  # hyperparameters or round count have moved since, it describes a model that
+  # no longer exists.
+  #
+  # This STOPS rather than warns. A warning does not set a non-zero exit code,
+  # so run_pipeline_*.ps1 would log "OK" and carry on, and Rscript defers
+  # warnings to a block at the very end -- by which point the ensemble is
+  # already written to disk. The weight moved 0.40 -> 0.55 on a round-count
+  # change alone, so a stale one is a wrong submission, not a cosmetic issue.
+  #
+  # Compares EVERY tuned parameter the artifact recorded, not a hand-picked
+  # couple: the first version of this check compared max_depth and eta only
+  # while the artifact also stored subsample and colsample_bytree, so a retune
+  # touching those would have reported "no drift".
+  tuning_now <- readRDS("models/xgboost_tuning_results.rds")
+  drift <- character(0)
+  if (!isTRUE(all.equal(wf$tuning_nrounds, tuning_now$best_iteration))) {
+    drift <- c(drift, sprintf("nrounds %s -> %s", wf$tuning_nrounds, tuning_now$best_iteration))
+  }
+  for (p in names(wf$tuning_params)) {
+    if (!isTRUE(all.equal(wf$tuning_params[[p]], tuning_now$best_params[[p]]))) {
+      drift <- c(drift, sprintf("%s %s -> %s", p, wf$tuning_params[[p]], tuning_now$best_params[[p]]))
+    }
+  }
+  if (length(drift) > 0) {
+    stop(sprintf(paste0("Ensemble weight is STALE. Derived %s against a model that has since ",
+                        "changed: %s. Rerun analysis/ensemble_weight_walkforward.R, or set ",
+                        "USE_WALKFORWARD_WEIGHT <- FALSE to knowingly accept the contaminated ",
+                        "in-sample weight (POSTMORTEM Sec 5j)."),
+                 wf$derived_at, paste(drift, collapse = "; ")))
+  }
+
+  cat(sprintf("Ensemble weights (walk-forward %s, Sec 5j): XGBoost=%.3f, GAM=%.3f  [in-sample search wanted %.3f]\n",
+              wf$derived_at, xgb_weight, gam_weight, ensemble_weights_values[1]))
+} else {
+  xgb_weight <- ensemble_weights_values[1]
+  gam_weight <- ensemble_weights_values[2]
+  cat(sprintf("Ensemble weights (in-sample search, LEAKY -- see Sec 5j): XGBoost=%.3f, GAM=%.3f\n",
+              xgb_weight, gam_weight))
+}
 
 # Create ensemble probabilities by weighted combination.
 #
@@ -167,8 +236,26 @@ cat("Columns: player_name, team, date, match_id, season, brownlow_votes, ensembl
 
 # Save Ensemble Results ####
 
+# Persist the weights ACTUALLY USED above, not the ones the contaminated search
+# returned. Without this the corrected blend reaches the submission (09 reads
+# results/ensemble_probabilities.rds) while results/ensemble_results.rds keeps
+# the in-sample weight -- and 07_season_predictions.R reads THAT via
+# load_trained_models() (R/script_utils.R:205) to rebuild its own ensemble for
+# the season predictions and the 08 winner simulation. The result was two
+# different models: 09 shipping w_xgb = 0.55 while 07/08 quietly used the
+# contaminated weight the walk-forward fix exists to avoid. Found in pre-PR
+# review, 2026-09-02.
+ensemble_weights_used <- ensemble_weights
+ensemble_weights_used$weights <- stats::setNames(c(xgb_weight, gam_weight),
+                                                 names(ensemble_weights$weights))
+ensemble_weights_used$weight_source <- if (USE_WALKFORWARD_WEIGHT) {
+  "walk-forward (POSTMORTEM Sec 5j)"
+} else {
+  "in-sample search (CONTAMINATED - Sec 5j)"
+}
+
 ensemble_results_final <- save_ensemble_results(
-  ensemble_weights = ensemble_weights,
+  ensemble_weights = ensemble_weights_used,
   ensemble_predictions = ensemble_predictions,
   constrained_ensemble = constrained_ensemble,
   performance_summary = performance_summary,

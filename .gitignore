@@ -16,3 +16,6 @@ submissions/
 analysis/submission_comparison/
 *.rds
 *.RData
+
+# Pipeline run logs (transient)
+*.log

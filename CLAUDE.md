@@ -32,7 +32,29 @@ source("10_submission_analysis.R")        # Analyses the Datathon submission
 - Never edit NAMESPACE directly — roxygen2 generates it
 
 ### Modeling Philosophy
-Optimize for **multinomial probability calibration**, not classification accuracy. Priority: log-loss > ECE > Brier > constraint compliance > accuracy.
+**The datathon scores RMSE.** Verified 2026-09-02 against the 2025 and 2026
+Terms & Conditions, which use identical wording: "average RMSE for each
+individual prediction," lowest wins. The FAQ adds "you should use a regression
+model, not a classification model."
+
+This file previously said to optimise multinomial probability calibration with
+priority `log-loss > ECE > Brier`. That was wrong about the competition, and it
+matters in one specific place: **model selection**. `optimal_nrounds()`
+early-stops on `validation_mlogloss` and `tune_xgboost_honest()` ranks
+candidates by mean fold mlogloss, so rounds and hyperparameters are still
+chosen on a metric the competition does not score. See POSTMORTEM-2025.md
+Sec 5k.
+
+What to do:
+- **Report and compare on RMSE after IPF**, via `evaluate_seeds()`. Every
+  number in POSTMORTEM-2025.md is already RMSE, so the measurement layer was
+  never affected.
+- A multinomial (`multi:softprob`) model is still the right *structure* —
+  votes are 0/1/2/3 with exactly one 3, one 2 and one 1 per match, and IPF
+  needs a probability matrix to enforce that. Predicting probabilities and
+  taking the expectation is a regression on votes; that is not the same
+  mistake as optimising classification accuracy.
+- Calibration remains worth checking as a diagnostic. It is not the objective.
 
 ### Time-Aware Validation (CRITICAL)
 - Train on historical seasons up to cutoff, validate on next season, test on most recent 2

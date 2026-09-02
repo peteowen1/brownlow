@@ -401,6 +401,104 @@ made things worse, despite the underlying signal being real and confound-
 checked (§1). The regression-level finding stands; every attempt to turn it
 into a working sim adjustment has not.
 
+## 5a. Weekly, honestly-tuned rematch, per Pete's methodology
+
+Two shortcuts in §5's first attempt were fair criticism: (1) it reused
+hyperparameters tuned for the 259-feature pre-season model, and
+`colsample_bytree = 0.6` competing for column-sampling slots with 9 new
+columns could genuinely hurt independent of whether the signal is real — "the
+worst case should be ignoring useless features" only holds with hyperparameters
+tuned for THAT feature count; (2) it tested one fixed cutoff (round 14) rather
+than Pete's actual proposal, usable "every round after the first one comes
+in".
+
+Both fixed. `R/honest_tuning.R` adds a leak-free hyperparameter search reusing
+`create_time_aware_cv()` — already correct (expanding-window folds); the bug
+was that the existing tuner never called it (§3a/POSTMORTEM §5g).
+`analysis/weekly_in_season_model.R` sweeps cutoffs 10/12/14/16/18 rather than
+one, training the stage-2 model once per season and evaluating it at every
+cutoff rather than refitting per cutoff.
+
+```
+by cutoff:
+ cutoff n  mean_improvement    se       t
+     10 7          -0.0227  0.0143  -1.59
+     12 7          -0.0323  0.0247  -1.30
+     14 7          -0.0166  0.0209  -0.79
+     16 6          -0.0090  0.0269  -0.33
+     18 6          -0.0242  0.0111  -2.18
+
+pooled: 33 season-cutoff pairs, mean -0.0212, se 0.0087, t = -2.44, p = 0.021
+(reference — stale hyperparameters, one cutoff: -0.0405, t=-4.02, p=0.007)
+```
+
+**Proper tuning roughly halved the damage** (the hyperparameter-starvation
+hypothesis was real) but did not flip the sign: still significantly worse than
+the pre-season baseline (p = 0.021), not merely "no better".
+
+**Not uniform, though** — this is the part worth attention over the pooled
+number:
+
+```
+2019, 2020, 2021, 2023, 2024 — consistently worse, sometimes badly
+2022                          — consistently BETTER at every cutoff (+0.036 to +0.105)
+2025                          — better at 4 of 5 cutoffs, worse only at cutoff 18
+```
+
+Two of seven seasons show real gains; five show real losses. Not explained.
+2025 being one of the winners is suggestive given §3b already found 2022-2025
+harder to predict than 2017-2021 for the pre-season model — if the underlying
+relationship has genuinely shifted in recent seasons, a model trained mostly on
+older data would show exactly this signature (net negative pooled across
+history, positive on the most representative recent data). Speculative, not
+measured; a recency-weighted or shorter-training-window variant would test it
+cheaply if pursued.
+
+**Five attempts at explicitly modelling the in-count momentum signal now**:
+Plackett-Luce as predictor, Plackett-Luce as sampler, the linear tilt, the
+stale-hyperparameter trained model, and this honestly-tuned weekly version.
+Four net negative, one (this one) negative-but-improving-and-heterogeneous. Not
+pursued further this session; the 2022/2025 pattern is the one thread worth
+returning to if this is picked back up.
+
+## 5b. Why it doesn't help: Matt Rowell, round by round
+
+Direct check per Pete's request: for Rowell specifically (39 votes, WON 2025),
+does the live model's expected total move toward the truth as real results
+come in? `analysis/rowell_live_vs_datathon.R`.
+
+```
+             actual  datathon  live
+Matt Rowell     39     26.13   26.44
+```
+
+Barely moved — 0.3 votes, nowhere near the ~30 the intuition "it has real
+in-play information, it should be much closer" predicts. Top-15 aggregate is a
+small, mixed positive (MAE 3.844 -> 3.667, 7 of 15 players improved) — not the
+clean win either hypothesis expected.
+
+The round-by-round trajectory (`analysis/harness/rowell_round_by_round.csv`)
+rules out the first guess (his hauls came late, diluting a season-long sum):
+his `inseason_overperformance` — cumulative actual votes minus the model's own
+cumulative expectation — was already 4.8 by round 4 and 12.2 by round 9,
+staying elevated at 10-14 for the rest of the season. The signal was present,
+large, and persistent almost the whole year. The model's round-by-round
+predictions barely differ from the pre-season ones in any single round despite
+that signal sitting right there as an input feature.
+
+**Why: this ties directly back to the original persistence regression (§1).**
+That found the relationship real (pooled t=4.78) but R-sq = 0.019 — it explains
+under 2% of back-half variance. A signal that weak is exactly what a properly
+regularised model, trained on 2017-2024, should learn to mostly ignore:
+historically, a player far ahead of expectation usually regresses rather than
+keeps accumulating proportionally. Rowell's case is spectacular in hindsight —
+the momentum did keep paying off for him — but one dramatic case does not mean
+the general historical relationship was strong enough to justify a model
+leaning on it. The model is not broken; it is making the statistically
+defensible call given weak historical evidence, and that call happens to be
+wrong for this one player. This closes the in-count workstream for now with an
+actual mechanism, not just a null result.
+
 ## 6. Order of work
 
 1. Populate the eligibility register from an authoritative source, and wire

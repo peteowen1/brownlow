@@ -419,6 +419,30 @@ worth 0.00024 — inside the noise band.** Keep it because it is principled and
 free, not because it measurably helps. The last row reconfirms IPF at 0.00218 on
 the final feature set, up from the 0.00176 measured without `player_coef`.
 
+**Why the imputation measures as nothing — checked 2026-09-02 on the
+regenerated data.** The coverage gap is real but sits almost entirely where the
+votes aren't, so no imputation choice can move an aggregate much:
+
+| `player_coef` | rows | % rows | votes | % votes | votes/row |
+|---|---:|---:|---:|---:|---:|
+| present | 6,419 | 67.4% | 1,125 | 90.6% | 0.175 |
+| missing | 3,103 | 32.6% | 117 | **9.4%** | **0.038** |
+
+Of the 2025 **top-25 vote-getters, exactly one is affected**: Finn Callaghan
+(21 votes, equal-11th, missing on 100% of his games). The other 24 have full
+coverage. The affected names are all recent draftees who debuted after the
+GAM's fitting window — Callaghan, Will Ashcroft, Harry Sheezel, Aaron Cadman,
+Sam Darcy, Harley Reid, Josh Weddle.
+
+So the cost is not "a third of the target season". It is **one top-25 contender
+per season, plus a slice of the individual worst misses** — and note Josh
+Weddle appears in the Sec 3 worst-misses table (Rd 14: we said 0.19, he polled
+3). That is a narrow, recurring, emerging-young-player failure, which is the
+same category Sec 3's Gold Coast pattern and the momentum work both failed to
+crack. Worth fixing eventually via a position/experience prior for unseen
+players; **not** worth ranking above the remaining deadline work, and this
+document should not have implied otherwise.
+
 ## 5c. Club names change in the season being predicted — FIXED 2026-09-01
 
 The raw `data/brownlow_datathon_dataset.csv` uses different club names for the
@@ -743,6 +767,248 @@ game — the same convention as `games_this_season`, and not leakage. The
 debut-zero test only applies to features that claim to be strictly prior-only;
 this one doesn't claim that, so a non-zero debut value is correct.
 
+## 5j. The ensemble weight is selected on in-sample predictions — found 2026-09-02
+
+`optimize_ensemble_weights()` chooses the XGBoost/GAM blend by minimising
+log-loss on the models' stored predictions. But stage `05` logs
+`Retraining production model on complete dataset ... seasons 2015 ... 2024` and
+then writes probabilities for all 96,810 rows. **The 2023-24 rows used for
+weight selection are therefore predicted by a model that trained on them.**
+
+The contamination is asymmetric, which is what makes it bite. A 391-round
+booster memorises its training rows; a shrunk GAM does not:
+
+| model alone | 2023-24 (in-sample) | 2025 (out-of-sample) |
+|---|---:|---:|
+| XGBoost | 0.33565 | 0.35771 |
+| GAM | 0.36177 | 0.35805 |
+
+So on the selection data XGBoost looks 0.026 better; out of sample the gap is
+0.0003. Weight selection on 2023-24 is monotone toward `w_xgb = 1.00` under
+BOTH log-loss and RMSE-after-IPF (`analysis/ensemble_weight_metric.csv`) — the
+metric is not the problem, the contamination is.
+
+Measured on 2025, weights chosen without seeing it:
+
+| w_xgb | source | 2025 RMSE |
+|---|---|---:|
+| 0.55 | holdout argmin (NOT selectable, shown for shape) | 0.35637 |
+| 0.858 | what ships today | **0.35702** |
+| 0.90 | coarse grid at its cap | 0.35720 |
+| 1.00 | what honest-looking selection actually picks | 0.35771 |
+
+Three conclusions, one of which reverses an earlier call in this document:
+
+1. This is a real leak in the shipped pipeline, distinct from Sec 5g's tuning
+   leak and Sec 5i's feature leak. Same family, third instance.
+2. **The GAM earns its place.** A ~0.5 blend beats pure XGBoost by 0.00134 out
+   of sample. Sec 5b's "keep the GAM" survives, on better evidence than it was
+   originally argued — and `06`'s "GAM only adds 0.0002 log-loss" is itself an
+   in-sample number and should not have been quoted as if it were meaningful.
+3. **The `min = 0.1, max = 0.9` weight constraint is load-bearing.** It is the
+   only thing preventing the contaminated selection from going to pure
+   XGBoost, and it is worth 0.00069 on 2025 purely by accident. Do not remove
+   it before fixing the selection data — an earlier note in this session called
+   the cap an arbitrary limitation worth relaxing, which was exactly backwards.
+
+**Fix:** select the weight on walk-forward predictions (2023 from a model
+trained on `< 2023`, 2024 from `< 2024`), which is two fits using
+`optimal_nrounds()`. Until then the cap stays.
+
+### 5j.1 The fix, measured — `analysis/ensemble_weight_walkforward.R`
+
+Both components regenerated walk-forward for 2023 and 2024 (season `S` scored
+by models trained only on `< S`); the weight chosen on those, then applied
+once to 2025. The curve is a clean interior parabola, nothing like the
+monotone in-sample one:
+
+| w_xgb | 0.00 | 0.30 | **0.40** | 0.55 | 1.00 |
+|---|---:|---:|---:|---:|---:|
+| walk-forward RMSE | 0.39926 | 0.39830 | **0.39824** | 0.39835 | 0.40016 |
+
+Applied to 2025:
+
+| weight source | w | 2025 RMSE |
+|---|---:|---:|
+| holdout argmin (NOT selectable) | 0.55 | 0.35637 |
+| **walk-forward selected** | **0.40** | **0.35647** |
+| ships today | 0.858 | 0.35702 |
+| in-sample selected | 1.00 | 0.35771 |
+
+Honest selection lands within 0.0001 of the best achievable weight and is
+worth **0.00055** against what ships. For scale that is comparable to IPF
+adoption (0.00218) and larger than the honest-hyperparameter change (0.00042),
+from a one-line change to which rows the weight is fitted on.
+
+Two known biases in the measurement, both pushing the same way (toward the
+GAM), both stated rather than buried:
+
+1. The walk-forward XGBoost arm excludes `player_coef`, since that feature is
+   a GAM random effect fitted across all seasons and leaks backwards into any
+   earlier fold. Production XGBoost includes it, so the selection-stage
+   booster is slightly weaker than the one that ships.
+2. `prepare_gam_test_data()` maps unseen players to an `NA` factor level, so
+   2,627 of 19,044 selection rows (13.8%) dropped out of the join — and those
+   are exactly the emerging players the GAM handles worst. Same population as
+   the Sec 5e coverage gap.
+
+**Neither changes the decision, and it is worth saying why rather than just
+asserting it:** the walk-forward curve is flat across 0.30-0.55 (0.39830 to
+0.39835), so correcting a bias that would move `w` from 0.40 to roughly 0.50
+moves 2025 RMSE by about 0.0001. The biases are real; they cannot reach the
+conclusion. A rerun with `predict(..., exclude = "s(player_name)")` — the
+principled fix, matching Sec 5e's impute-to-zero logic — was planned and then
+dropped as not decision-relevant.
+
+Remaining caveat that IS worth respecting: this is **one** evaluation season.
+The procedure is sound and the direction is large and consistent, but 0.00055
+rests on 2025 alone.
+
+## 5k. We select models on the wrong metric — found 2026-09-02
+
+The competition scores **RMSE**. The 2025 and 2026 Terms & Conditions carry
+identical wording ("average RMSE for each individual prediction", lowest
+wins) and the FAQ says "you should use a regression model, not a
+classification model". `CLAUDE.md` said the opposite — optimise multinomial
+calibration, `log-loss > ECE > Brier` — and has been corrected.
+
+The measurement layer was never affected: `evaluate_seeds()` computes RMSE
+after IPF, so every number in this document is already the scored quantity.
+The problem is one layer up, in **selection**:
+
+| step | selects on | should select on |
+|---|---|---|
+| `optimal_nrounds()` | `validation_mlogloss` | RMSE after IPF |
+| `tune_xgboost_honest()` | mean fold mlogloss | RMSE after IPF |
+| `optimize_ensemble_weights()` | log-loss | RMSE after IPF (and OOS rows, Sec 5j) |
+
+So rounds and hyperparameters are chosen for a metric the competition does not
+score. This is the same class of error as Sec 5j, one level up: there the
+weight was fitted on the wrong ROWS, here the model is chosen by the wrong
+OBJECTIVE. Whether it costs anything is unmeasured — mlogloss and RMSE are
+correlated, and Sec 5j found they agreed on the ensemble weight once the rows
+were honest. **Not yet tested. Do not assume it is worth points.**
+
+Note the structure is still right: `multi:softprob` with IPF is a legitimate
+way to produce a votes regression, because the 3-2-1 constraint needs a
+probability matrix to enforce. The objection is only to selecting on mlogloss.
+
+### 5k.1 Resolved — it matters for ROUNDS, not for HYPERPARAMETERS
+
+Both halves have now been measured, and they came out opposite ways. That
+split is the useful part of this section.
+
+**Rounds: the metric mattered a lot.** Validating on 2024, mlogloss bottoms at
+**400** rounds then climbs steadily (0.17085 -> 0.17874 by 2500), while
+RMSE-after-IPF keeps improving to **~1100-1200** and is flat across 600-1500.
+A 3x error. On the 2025 holdout, 5 seeds: 0.35648 (RMSE-selected) against
+0.35690 (mlogloss-selected), delta -0.00042 on a 0.00055 bar — adopted on
+derivation, not on the measurement. The larger consequence was indirect: the
+round change moved the honest ensemble weight from 0.40 to 0.55, so shipping
+the new rounds with the old weight would have mis-set the blend.
+
+**Hyperparameters: the metric did not matter at all.**
+`analysis/rmse_hyperparameter_search.R` ran an independent 12-candidate search
+over 4 leak-free expanding-window folds ranking on mean fold RMSE-after-IPF —
+79 minutes, since RMSE selection cannot early-stop and every fold trains to
+`max_rounds`. It re-selected **the incumbent's exact parameters**:
+
+| param | mlogloss-tuned | RMSE-tuned |
+|---|---|---|
+| `max_depth` | 4 | 4 |
+| `eta` | 0.025 | 0.025 |
+| `subsample` | 0.8 | 0.8 |
+| `colsample_bytree` | 0.6 | 0.6 |
+
+Head to head on 2025, both arms given RMSE-selected rounds so the comparison
+isolates the hyperparameters: **0.35642 vs 0.35642, delta exactly 0** —
+bit-identical, as it must be for one configuration compared with itself.
+
+The mechanism is worth keeping. `eta` and `max_depth` govern *how* the model
+learns, and both objectives reward learning the same structure. Where they
+diverge is *when to stop* — the point past which the probabilities decalibrate
+while the IPF'd point predictions keep improving. It is a stopping-rule
+disagreement, not a model-shape one. So the fix belongs in
+`optimal_nrounds()`, which now takes `metric = "rmse_ipf"`, and
+`tune_xgboost_honest()` can safely keep ranking on mlogloss (though it accepts
+`metric` too).
+
+Incidental but useful: XGBoost alone at 1100 rounds scores **0.35642** on
+2025, against **0.35556** for the shipped ensemble. The GAM is worth
+**0.00086** out of sample — the largest single contribution in the stack, and
+the strongest version yet of Sec 5b's "keep the GAM". Sec 5j's contaminated
+in-sample search had been reporting that contribution as 0.0002.
+
+## 5l. 2026 changes to the competition and the season — researched 2026-09-02
+
+**Competition — no structural change from 2025.** Full season, per-match,
+per-player: 46 players x 207 matches = 9,522 predictions. An earlier worry in
+this session that 2026 had narrowed to "count on the night only" is
+**refuted** — that phrase appears verbatim in the 2025 page too and refers to
+when scoring happens, not to scope. Template by **8 September 2026**,
+deadline **2:59pm AEST 21 September 2026**, registration closes 17 September.
+One submission per entrant, resubmission allowed with the last file counting.
+Suspended players still accrue votes and must still be predicted (clause 12,
+unchanged wording from 2025) — consistent with `data/brownlow_ineligible.csv`
+being about *medal eligibility*, not vote accrual.
+
+**Season — several changes that move the distributions our features read.**
+
+1. **Umpires may now consult statistics before finalising votes** (first
+   time). This is a regime change in the target itself, not in the inputs:
+   pre-2026 training data reflects umpires voting from memory. Plausibly makes
+   box-score features MORE predictive going forward, which would be the first
+   thing in this document that argues for weighting recent seasons higher.
+   The reported "17 stat categories" is secondary-sourced and unconfirmed.
+2. **Sub rule scrapped** — 23-player squads with a 5-man bench, so the `SUB`
+   role disappears. It was 1,923 rows at 0.002 votes/game, so no loss.
+3. **Centre bounce scrapped** — ball-ups instead; ruckmen may not cross the
+   centre circle early. Directly affects `hitouts`, `hitouts_to_advantage`,
+   `ruck_contests`, `clearances`.
+4. **Last-disposal out-of-bounds free kick** between the arcs; shrug in a
+   tackle now counts as prior opportunity; kick-in clock 12s -> 8s. All move
+   free-kick, turnover and disposal counts.
+5. Tasmania enters **2028**, not 2026. 18 clubs, no change.
+6. Champion Data remains the provider, with expanded capture and "last touch"
+   now logged as a turnover.
+
+Taken together, 2026 is the least like its predecessors of any season in the
+training set. Nothing here is actionable as a feature yet, but it is the
+strongest argument available for testing recency weighting before the
+deadline.
+
+## 5m. player_position: available, hugely predictive, and worth nothing
+
+`player_position` sits in the raw datathon CSV, 100% populated across all
+96,810 rows including the 2025 prediction season, 20 values. It is not a model
+feature — `prepare_modeling_data()` builds `feature_cols` from numeric columns
+only, so a character column was dropped silently. Nobody decided this.
+
+Votes per game by starting position, training seasons:
+
+| C | RR | R | FF | CHF | RK | ... | FB | BPR | BPL | SUB |
+|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|
+| 0.518 | 0.447 | 0.386 | 0.187 | 0.147 | 0.142 | | 0.039 | 0.039 | 0.034 | 0.002 |
+
+A 15x spread from centre to back pocket. Measured through the harness anyway
+(`analysis/player_position_feature.R`, one-hot, 5 seeds, IPF):
+**+0.00013 against a 0.00050 decidability bar — nothing.**
+
+The explanation is that the box-score stats already encode position. A
+centre's disposals, clearances and contested possessions ARE the position; the
+label adds no information the model did not already have. A large marginal
+association is not a large conditional one, which is the whole reason this
+document insists on measuring instead of reasoning.
+
+This also closes off the obvious remaining read of Sec 3's "non-midfielders"
+pattern. The stats it recommended adding (`hitouts_to_advantage`,
+`contested_marks`, `intercepts`, `spoils`, `one_percenters`, `ruck_contests`)
+are ALL already features, and the position label does not help either. Rucks
+poll at 0.1362 votes/game against 0.1337 for everyone else — umpires are not
+under-rewarding them, so this was never a bias to correct. The model picks the
+wrong ruck games, which is a discrimination problem with no cheap fix in
+sight.
+
 ## 6. Codebase review
 
 28 files, 13,842 lines in `R/`, 173 exported functions.
@@ -839,6 +1105,54 @@ residual player-bias loses to `player_coef`.
 Do 1 and 2 before the template drops on 8 September. They are independent of the
 new data, and everything else depends on them: item 1 is what makes items 3 and 5
 decidable, and item 2 is what makes the measurements real.
+
+### External-data ideas raised 2026-09-02, Pete's prioritisation
+
+Three candidates came out of a top-10 variable-importance review (coaches_votes
+47.2%, supercoach_score 16.0%, top 4 = 72.1% of gain — the model leans hard on
+vote-correlated inputs, leaving little room for anything genuinely new).
+
+- **Team form vs. pre-season expectation — BUILT, tested, within noise.**
+  Pete: "a good one." Targets item 5's first bullet (the Gold Coast miss).
+  `R/team_form_features.R` (`add_team_form_vs_expectation()`) — no external
+  data, derived purely from `team_score`/`opposition_score` already in every
+  row. Leak-free: prior season's win rate is fully known before the season
+  starts; current-season win-rate-so-far is lagged (debut-season assertion in
+  `assert_team_form_clean()`). Tested in
+  `analysis/team_form_vs_expectation.R`, fit on 2015-2024 / scored on the real
+  2025 holdout, 5 seeds each: delta -0.00014 vs. a 0.00092 noise threshold —
+  **not distinguishable from zero on this one holdout season.** Not wired into
+  the pipeline. Doesn't rule out the underlying idea — one season's aggregate
+  RMSE can hide a real effect concentrated in a few clubs (Gold Coast was 6 of
+  16 worst misses, not the whole holdout) — a Rowell-style per-club case study
+  is the natural next check before spending more on this.
+
+  **Done, 2026-09-02** (`analysis/gold_coast_team_form_case_study.R`). The
+  feature construction is verified correct — `team_form_vs_expectation` spikes
+  to +0.52 by round 3 (Gold Coast's hot start against their weak 2024
+  baseline) and decays toward +0.16-0.19 as the season's sample size grows,
+  exactly as designed. But on the three rounds POSTMORTEM Sec 3 actually
+  flagged (Rowell rounds 4/7/9, predicted ~0.1-0.15 for an actual 3 votes),
+  the new model's predictions moved in the WRONG direction (0.153->0.137,
+  0.193->0.151, 0.067->0.062) despite a real, substantial team-form signal
+  present on every one of those rows. Gold-Coast-wide MAE on votes>0 rows:
+  base 1.0666, +team_form 1.0725 — also slightly worse, consistent with the
+  whole-holdout null. Same shape as the player-level in-season-momentum result
+  (Sec 5/5a/Rowell case): the signal is real and correctly constructed, but
+  gain-based importance (coaches_votes + supercoach + afl_fantasy = 68.7% of
+  the model, Sec on var importance) leaves a tree ensemble almost no room to
+  act on a team-context feature when a player's own performance-proxy inputs
+  are modest — which is exactly the case on Rowell's breakout games. **CLOSED:
+  not worth pursuing further before the deadline.** Parked alongside odds and
+  buzz, for the same underlying reason as the momentum work: real effect, but
+  this model architecture can't extract it on the cases that matter.
+- **Betting/bookmaker odds, tracked weekly — DEFERRED.** Pete: "Don't want to
+  use odds yet (maybe later)." Likely the strongest signal of the three, but
+  parked; do not build without asking again.
+- **Media/search buzz — DEFERRED, logged for later.** Pete: "buzz could be
+  good but harder so log that for later." Plausible (captures the kind of
+  narrative momentum the model can't see) but sourcing is unverified effort —
+  revisit only if asked.
 
 ---
 

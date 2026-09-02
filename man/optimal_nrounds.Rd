@@ -12,6 +12,9 @@ optimal_nrounds(
   val_season = NULL,
   max_rounds = 2000,
   early_stopping_rounds = 50,
+  metric = c("mlogloss", "rmse_ipf"),
+  match_id_col = "match_id",
+  round_grid = NULL,
   cache_file = "models/nrounds_cache.rds",
   refresh = FALSE,
   verbose = TRUE
@@ -30,7 +33,19 @@ optimal_nrounds(
 
 \item{max_rounds}{Upper bound for the search}
 
-\item{early_stopping_rounds}{Rounds without improvement before stopping}
+\item{early_stopping_rounds}{Rounds without improvement before stopping
+(`metric = "mlogloss"` only; the RMSE search scans truncations instead)}
+
+\item{metric}{Selection criterion. `"mlogloss"` early-stops on validation
+multinomial log-loss — the historic behaviour. `"rmse_ipf"` selects on
+RMSE after IPF normalisation, which is **what the datathon actually
+scores** (POSTMORTEM-2025.md Sec 5k).}
+
+\item{match_id_col}{Column identifying the match, required by `"rmse_ipf"`
+because IPF normalises within a match}
+
+\item{round_grid}{Truncations to evaluate under `"rmse_ipf"`; defaults to
+100-step increments up to `max_rounds`}
 
 \item{cache_file}{Where to persist results}
 
@@ -39,7 +54,7 @@ optimal_nrounds(
 \item{verbose}{Print progress}
 }
 \value{
-List with `nrounds`, `score`, `cached` and the `key` used
+List with `nrounds`, `score`, `metric`, `cached` and the `key` used
 }
 \description{
 Trains on every season before `val_season`, watches `val_season`, and stops
@@ -51,3 +66,18 @@ The answer is cached in `cache_file` against a key covering the parameters,
 features, data shape and search settings, so repeat calls on an unchanged
 setup are free. Pass `refresh = TRUE` to force a fresh search.
 }
+\section{Choosing the metric}{
+
+These disagree, and not subtly. Measured 2026-09-02 on the 267-feature data
+with the honest hyperparameters, validating on 2024: mlogloss bottoms at
+**400** rounds and then climbs steadily (0.17085 -> 0.17874 by 2500), while
+RMSE-after-IPF keeps improving to **1200** and is flat across 600-1500. So
+log-loss stops the model at a third of the trees the scored metric wants.
+
+Past ~400 rounds the probability estimates get worse-calibrated while the
+IPF'd point predictions keep improving. That is a real trade, not a free
+win: anything downstream that consumes the PROBABILITIES rather than the
+expected votes — the ensemble blend especially — may be affected, so
+re-derive the ensemble weight after changing this.
+}
+
