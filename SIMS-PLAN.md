@@ -333,7 +333,75 @@ not finish there.**
 
 This is now the baseline every further sim change gets measured against.
 
-## 4. Order of work
+## 5. In-season model — tested, worse than the pre-season baseline
+
+Pete's proposal, 2026-09-02: rather than a hand-tuned linear slope (§1, tested
+and rejected), train a real model on rolling in-season features (actual votes
+so far this season, per-game rate raw and shrunk, overperformance vs a
+walk-forward base model, last-3-games) and let it learn context-dependent
+trust rather than applying one number everywhere.
+
+Built (`R/in_season_features.R`, hand-verified against a synthetic 5-game
+season, every value exact) and evaluated against the exact same baseline,
+cutoff (round 14) and weighted top-20 log-loss metric as the tilt test, for a
+fair rematch — `analysis/in_season_model_value.R`:
+
+```
+seasons scored              : 7 (2019-2025; 2017-2018 lack enough prior
+                                  in-season-feature history for stage 2's own
+                                  walk-forward round tuning)
+mean weighted LL, baseline  : 1.6227
+mean weighted LL, stage2    : 1.6631
+mean improvement            : -0.0405
+improved in                 : 0 of 7 seasons
+paired t-test               : t = -4.02, p = 0.007
+```
+
+**Significantly worse, not just no better** — a stronger negative than the
+tilt (-0.0229, t=-1.16, p=0.28), and this is the direct comparison to what a
+pre-season "datathon-style" model achieves with zero in-season information
+versus what the same architecture achieves with real in-play votes as inputs.
+
+Investigated why with `analysis/diagnose_freeze_artifact.R`, since the
+back-half evaluation design freezes each player's in-season features at their
+round-14 state for every remaining match — a covariate combination (late-round
+opponent/venue features paired with round-14 in-season state) the model never
+saw in training, which could look like noise to a tree model independent of
+whether the underlying signal is usable. Tested by comparing the SAME trained
+model against frozen features vs an oracle "natural" version (each row's own
+true cumulative in-season state — not usable live, since it would require
+already knowing later rounds' votes, but isolates whether freezing itself is
+the cause):
+
+```
+season 2023, 4,002 back-half rows, pointwise RMSE on expected votes
+  baseline (no in-season info)      0.3733
+  stage-2, FROZEN at round 14       0.3747
+  stage-2, NATURAL per-row (oracle) 0.3746
+```
+
+**Freezing is ruled out** — frozen and oracle are essentially identical, and
+error does not rise with distance from the freeze point. Both are slightly
+worse than baseline even in the oracle case.
+
+**Open, not fully explained**: the pointwise RMSE gap here (~0.0013) is far too
+small to account for the season's simulation-based weighted-log-loss gap
+(-0.0789). A model whose mean predictions are barely different from baseline
+produced a meaningfully worse ranking outcome once run through the simulator.
+Plausible mechanism — log-loss punishes confident wrong ordering of contenders
+in a way RMSE-on-the-mean cannot see, so a small shift in probability *shape*
+(not just the mean) could matter far more to the sim than to a point-estimate
+check — but this is a hypothesis, not a confirmed diagnosis, and is recorded as
+such rather than papered over.
+
+**Verdict: do not pursue further for now.** Four attempts at explicitly
+modelling the in-count momentum signal — Plackett-Luce as predictor, Plackett-
+Luce as sampler, the linear tilt, and this trained model — have all failed or
+made things worse, despite the underlying signal being real and confound-
+checked (§1). The regression-level finding stands; every attempt to turn it
+into a working sim adjustment has not.
+
+## 6. Order of work
 
 1. Populate the eligibility register from an authoritative source, and wire
    `apply_eligibility()` into `08_brownlow_simulation.R`.
