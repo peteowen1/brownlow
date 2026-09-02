@@ -1,5 +1,37 @@
 # Deadline-day runbook — Brownlow Datathon 2026
 
+## Next session starts here
+
+**State as of 3 September 2026.** Shipped model scores **0.35530** on the 2025
+holdout (was 0.35836 on 2 September), verified end to end across all 9,522 rows
+with 1242.0 predicted votes against 1242 actual. `main` is at v0.2.3, `dev`
+fully merged, tree clean. Everything below is queued, not started.
+
+1. **Flip `TARGET_SEASON` to 2026 in `09_submission_predictions.R`** once the
+   template lands (**by 8 September**). Section 1 below has the checks. One
+   line, but the whole submission depends on it.
+2. **Covariate shift from the 2026 rule changes** — the largest untouched item.
+   No centre bounce, no sub, last-disposal free kicks all move the stat
+   distributions the features are built on. §5o handled the two composites most
+   exposed (`supercoach_score`, `afl_fantasy_score`); the raw affected features
+   carry only 1.6% of gain, so this may be nearly done — measure before
+   building.
+3. **Single-seed vs averaged asymmetry.** Production averages 5 seeds; the
+   walk-forward weight arms in `analysis/ensemble_weight_walkforward.R` are
+   still single-seed. ~45 min to fix, on a weight curve flat across 0.30-0.55,
+   so genuinely second-order. Deliberately skipped, not overlooked.
+
+**Do not** reach for new features without first measuring what fraction of rows
+they can touch — see `POSTMORTEM-2025.md` §5n. Five feature ideas measured null
+this session; every banked gain came from the measurement layer.
+
+**Undecided, needs Pete:** the match-relative composites (§5o) were adopted on
+reasoning, not evidence — end-to-end gain was 0.00010 against the 0.00041 the
+harness suggested when it was recommended. Reverting is one line in `02` plus a
+chain rerun. Left in on the 2026 shift-robustness argument, which cannot be
+tested until 2026 data exists.
+
+
 **Deadline: 2:59pm AEST, Monday 21 September 2026.** Template released no later
 than **8 September 2026**. Registration closes 17 September.
 
@@ -48,15 +80,28 @@ allowed and the last file before the deadline is the one scored.
 Run from `C:\dev\brownlow`. Use PowerShell, not Git Bash — `arrow` segfaults
 under Git Bash R, and inline `Rscript -e` has segfaulted on this machine.
 
-`run_pipeline_02_06.ps1` does stages 02-06 in sequence and **stops at the first
-failure** rather than letting later stages run on stale inputs.
+`run_chain.ps1` runs any sequence of steps and **stops at the first failure**
+rather than letting later stages run on stale inputs:
+
+```powershell
+pwsh -File run_chain.ps1 -Steps "02_base_feature_engineering.R","03_gam_model.R",`
+  "04_enhanced_feature_engineering.R","05_xgboost_model.R",`
+  "analysis/ensemble_weight_walkforward.R","06_ensemble_predictions.R" -LogName deadline
+```
+
+For a long run, launch it detached so it survives the caller:
+
+```powershell
+Start-Process pwsh -ArgumentList '-NoProfile','-NonInteractive','-File',`
+  'C:\dev\brownlow\run_chain.ps1','-Steps','05_xgboost_model.R' -WindowStyle Hidden
+```
 
 | stage | what it does | measured time |
 |---|---|---|
 | `02_base_feature_engineering.R` | features from the raw CSV | 1.5 min |
 | `03_gam_model.R` | GAM + player random effects | 7.8 min |
 | `04_enhanced_feature_engineering.R` | adds `player_coef` | 0.3 min |
-| `05_xgboost_model.R` | trains, writes probabilities | 6.2 min |
+| `05_xgboost_model.R` | trains 5 seeds, averages, writes probabilities | 10-13 min |
 | `analysis/ensemble_weight_walkforward.R` | derives the blend weight | 9.6 min |
 | `06_ensemble_predictions.R` | blends, writes the file `09` reads | 0.3 min |
 | `09_submission_predictions.R` | builds the submission | seconds |
@@ -67,11 +112,16 @@ absent on a fresh clone — run `analysis/ensemble_weight_walkforward.R` first.
 It fails with a message saying exactly that, so this cannot pass silently.
 
 **Rerun the weight whenever the model changes.** The blend weight is fitted
-against a specific booster: when the round count went 391 -> 1100, the optimal
-weight moved 0.40 -> 0.55. Keeping the old weight across that change would
-have mis-set the ensemble. `06` compares the artifact's recorded
-hyperparameters against current tuning and warns on drift, but the warning is
-a backstop, not permission to skip the step.
+against a specific booster: when the round count went 391 -> 1100 the optimal
+weight moved 0.40 -> 0.55, and adding features moved it again to 0.35. Keeping
+an old weight across such a change mis-sets the ensemble.
+
+`06` **stops** (not warns) if the weight artifact's recorded hyperparameters,
+round count, or **prediction procedure** disagree with what is currently on
+disk. That last one matters: seed averaging changed nothing in the
+hyperparameters, so an earlier version of the check would have accepted a
+stale weight silently. Treat the stop as instruction to rerun
+`analysis/ensemble_weight_walkforward.R`, not as an obstacle to work around.
 
 Then `10_submission_analysis.R` to eyeball it.
 
