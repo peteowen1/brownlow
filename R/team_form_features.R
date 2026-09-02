@@ -84,6 +84,18 @@ add_team_form_vs_expectation <- function(stats) {
 #' @return `stats`, invisibly, after assertions pass
 #' @export
 assert_team_form_clean <- function(stats) {
+  # Coverage first. Without this, a row that failed to match team_games carries
+  # NA, `na.rm = TRUE` quietly drops it from the range check, and it is not
+  # flagged as team_no_prior_season either — so a broken join would pass every
+  # other assertion here. Not hypothetical: joining this dataset on the wrong
+  # key produced a 100% miss rate elsewhere on 2026-09-02.
+  n_missing <- sum(is.na(stats$team_prior_season_win_rate) |
+                   is.na(stats$team_current_season_win_rate_so_far))
+  if (n_missing > 0) {
+    stop(sprintf("%d of %d rows have no team form values; the join lost them.",
+                 n_missing, nrow(stats)))
+  }
+
   rng <- range(c(stats$team_prior_season_win_rate, stats$team_current_season_win_rate_so_far), na.rm = TRUE)
   if (rng[1] < 0 || rng[2] > 1) {
     stop(sprintf("team win-rate features out of [0,1]: range %.3f-%.3f", rng[1], rng[2]))

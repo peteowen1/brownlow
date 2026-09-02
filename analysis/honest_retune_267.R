@@ -1,6 +1,7 @@
 # Honest re-tune on the regenerated 267-feature data ---------------------------
 #
-# POSTMORTEM Sec 5g, still OPEN: the production hyperparameters come from
+# POSTMORTEM Sec 5g (OPEN when this script was written; CLOSED by its sibling
+# analysis/adopt_honest_tuning.R on 2026-09-02): the production hyperparameters came from
 # models/xgboost_tuning_results.rds, dated 25 September 2025, produced by the
 # original tuner -- which calls xgb.cv with the time-aware folds commented out
 # in favour of random 5-fold. That trains on future seasons to validate on past

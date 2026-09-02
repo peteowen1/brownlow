@@ -864,6 +864,105 @@ Remaining caveat that IS worth respecting: this is **one** evaluation season.
 The procedure is sound and the direction is large and consistent, but 0.00055
 rests on 2025 alone.
 
+## 5k. We select models on the wrong metric — found 2026-09-02
+
+The competition scores **RMSE**. The 2025 and 2026 Terms & Conditions carry
+identical wording ("average RMSE for each individual prediction", lowest
+wins) and the FAQ says "you should use a regression model, not a
+classification model". `CLAUDE.md` said the opposite — optimise multinomial
+calibration, `log-loss > ECE > Brier` — and has been corrected.
+
+The measurement layer was never affected: `evaluate_seeds()` computes RMSE
+after IPF, so every number in this document is already the scored quantity.
+The problem is one layer up, in **selection**:
+
+| step | selects on | should select on |
+|---|---|---|
+| `optimal_nrounds()` | `validation_mlogloss` | RMSE after IPF |
+| `tune_xgboost_honest()` | mean fold mlogloss | RMSE after IPF |
+| `optimize_ensemble_weights()` | log-loss | RMSE after IPF (and OOS rows, Sec 5j) |
+
+So rounds and hyperparameters are chosen for a metric the competition does not
+score. This is the same class of error as Sec 5j, one level up: there the
+weight was fitted on the wrong ROWS, here the model is chosen by the wrong
+OBJECTIVE. Whether it costs anything is unmeasured — mlogloss and RMSE are
+correlated, and Sec 5j found they agreed on the ensemble weight once the rows
+were honest. **Not yet tested. Do not assume it is worth points.**
+
+Note the structure is still right: `multi:softprob` with IPF is a legitimate
+way to produce a votes regression, because the 3-2-1 constraint needs a
+probability matrix to enforce. The objection is only to selecting on mlogloss.
+
+## 5l. 2026 changes to the competition and the season — researched 2026-09-02
+
+**Competition — no structural change from 2025.** Full season, per-match,
+per-player: 46 players x 207 matches = 9,522 predictions. An earlier worry in
+this session that 2026 had narrowed to "count on the night only" is
+**refuted** — that phrase appears verbatim in the 2025 page too and refers to
+when scoring happens, not to scope. Template by **8 September 2026**,
+deadline **2:59pm AEST 21 September 2026**, registration closes 17 September.
+One submission per entrant, resubmission allowed with the last file counting.
+Suspended players still accrue votes and must still be predicted (clause 12,
+unchanged wording from 2025) — consistent with `data/brownlow_ineligible.csv`
+being about *medal eligibility*, not vote accrual.
+
+**Season — several changes that move the distributions our features read.**
+
+1. **Umpires may now consult statistics before finalising votes** (first
+   time). This is a regime change in the target itself, not in the inputs:
+   pre-2026 training data reflects umpires voting from memory. Plausibly makes
+   box-score features MORE predictive going forward, which would be the first
+   thing in this document that argues for weighting recent seasons higher.
+   The reported "17 stat categories" is secondary-sourced and unconfirmed.
+2. **Sub rule scrapped** — 23-player squads with a 5-man bench, so the `SUB`
+   role disappears. It was 1,923 rows at 0.002 votes/game, so no loss.
+3. **Centre bounce scrapped** — ball-ups instead; ruckmen may not cross the
+   centre circle early. Directly affects `hitouts`, `hitouts_to_advantage`,
+   `ruck_contests`, `clearances`.
+4. **Last-disposal out-of-bounds free kick** between the arcs; shrug in a
+   tackle now counts as prior opportunity; kick-in clock 12s -> 8s. All move
+   free-kick, turnover and disposal counts.
+5. Tasmania enters **2028**, not 2026. 18 clubs, no change.
+6. Champion Data remains the provider, with expanded capture and "last touch"
+   now logged as a turnover.
+
+Taken together, 2026 is the least like its predecessors of any season in the
+training set. Nothing here is actionable as a feature yet, but it is the
+strongest argument available for testing recency weighting before the
+deadline.
+
+## 5m. player_position: available, hugely predictive, and worth nothing
+
+`player_position` sits in the raw datathon CSV, 100% populated across all
+96,810 rows including the 2025 prediction season, 20 values. It is not a model
+feature — `prepare_modeling_data()` builds `feature_cols` from numeric columns
+only, so a character column was dropped silently. Nobody decided this.
+
+Votes per game by starting position, training seasons:
+
+| C | RR | R | FF | CHF | RK | ... | FB | BPR | BPL | SUB |
+|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|
+| 0.518 | 0.447 | 0.386 | 0.187 | 0.147 | 0.142 | | 0.039 | 0.039 | 0.034 | 0.002 |
+
+A 15x spread from centre to back pocket. Measured through the harness anyway
+(`analysis/player_position_feature.R`, one-hot, 5 seeds, IPF):
+**+0.00013 against a 0.00050 decidability bar — nothing.**
+
+The explanation is that the box-score stats already encode position. A
+centre's disposals, clearances and contested possessions ARE the position; the
+label adds no information the model did not already have. A large marginal
+association is not a large conditional one, which is the whole reason this
+document insists on measuring instead of reasoning.
+
+This also closes off the obvious remaining read of Sec 3's "non-midfielders"
+pattern. The stats it recommended adding (`hitouts_to_advantage`,
+`contested_marks`, `intercepts`, `spoils`, `one_percenters`, `ruck_contests`)
+are ALL already features, and the position label does not help either. Rucks
+poll at 0.1362 votes/game against 0.1337 for everyone else — umpires are not
+under-rewarding them, so this was never a bias to correct. The model picks the
+wrong ruck games, which is a discrimination problem with no cheap fix in
+sight.
+
 ## 6. Codebase review
 
 28 files, 13,842 lines in `R/`, 173 exported functions.

@@ -133,6 +133,16 @@ cat(sprintf("✓ GAM probabilities loaded: %d rows\n", nrow(gam_prob_df)))
 # never fitted on it: 0.35647 against 0.35702 for the in-sample-selected
 # weight that used to ship -- worth 0.00055.
 #
+# PROVENANCE, because a hardcoded constant justified only by a comment rots:
+# 0.40 was selected at 18:52 on 2026-09-02, against the honest hyperparameters
+# adopted at 16:42 that same day (depth 4, eta 0.025 -- provenance$tuned_on in
+# models/xgboost_tuning_results.rds) and the stage-05 probabilities regenerated
+# from them at 16:47. Selection and production therefore agree on the model.
+# ANY re-tune, feature change, or 05 rerun invalidates this number until
+# analysis/ensemble_weight_walkforward.R is run again. Corroborating figures
+# for the 2025 comparison are in analysis/harness/ensemble_weight_grid.csv
+# (w=0.40 -> 0.356466, w=1.00 -> 0.357712).
+#
 # Set USE_WALKFORWARD_WEIGHT <- FALSE to fall back to the old behaviour.
 USE_WALKFORWARD_WEIGHT <- TRUE
 WALKFORWARD_XGB_WEIGHT <- 0.40
