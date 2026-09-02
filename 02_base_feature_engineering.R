@@ -51,6 +51,15 @@ features_data <- create_all_features(
 
 cat(sprintf(" %d observations, %d columns\n", nrow(features_data), ncol(features_data)))
 
+# Express the composites the model leans on relative to the same match, so a
+# league-wide shift in scoring does not move what the model reads. Needed for
+# 2026: AFL Fantasy scores hitouts, and the centre bounce is gone, so ruck
+# scores drop mechanically. See POSTMORTEM Sec 5o and R/match_relative_features.R.
+cat("Adding match-relative composites...")
+features_data <- add_match_relative_features(features_data)
+assert_match_relative_clean(features_data)
+cat(sprintf(" %d columns\n", ncol(features_data)))
+
 # Feature Analysis and Selection ####
 
 correlation_results <- analyze_feature_correlations(

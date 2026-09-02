@@ -3,6 +3,28 @@
 This file starts at 0.2.0. Earlier versions are documented in the commit
 history and in `POSTMORTEM-2025.md`.
 
+# brownlow 0.2.2
+
+2025 holdout RMSE 0.35556 -> 0.35546.
+
+* New `add_match_relative_features()`, wired into `02_base_feature_engineering.R`.
+  Expresses `supercoach_score`, `afl_fantasy_score`, `impact_score` and
+  `disposals` as a rank and a share-of-maximum within each match. Votes are
+  allocated within a match, and the two composites are absolute scores from
+  fixed-weight formulas -- AFL Fantasy scores hitouts, and the 2026 removal of
+  the centre bounce lowers ruck scores mechanically. A rank is invariant to a
+  league-wide shift. **Adopted on that reasoning, not on the measurement**: the
+  end-to-end gain was 0.00010, against 0.00041 in the isolated harness test.
+* `assert_match_relative_clean()` verifies rank orientation on every column
+  with a `_rank` counterpart. An inverted rank would reverse a feature's
+  meaning while still producing plausible values in [0, 1].
+* New `add_efficiency_features()` — impact per possession. **A documented null,
+  deliberately not wired into the pipeline.** It separates its target
+  population cleanly (players polling on low disposals show 5.896 impact per
+  disposal against 4.077) but cannot move the score, because that population is
+  ~1% of rows. Kept because a measured null with a verified mechanism is worth
+  more than an untested idea.
+
 # brownlow 0.2.1
 
 Behaviour-preserving: the selected blend weight and the shipped predictions are

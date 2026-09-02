@@ -1009,6 +1009,62 @@ under-rewarding them, so this was never a bias to correct. The model picks the
 wrong ruck games, which is a discrimination problem with no cheap fix in
 sight.
 
+## 5n. Impact per possession: the mechanism works, the metric can't see it
+
+The fourth feature null, and the one that explains the other three.
+
+`R/efficiency_features.R` targets Sec 3's third miss pattern — players polling
+on modest disposal counts. Motivated further by the 2026 research (Sec 5l): the
+umpire-statistics reform was triggered by the Rowell / Wanganeen-Milera
+controversy of September 2025, exactly this profile, and Rowell is our single
+biggest 2025 miss.
+
+The gap was real. Auditing all 267 features first (the lesson from Sec 5m)
+found per-minute rates, team-share ratios and possession-mix ratios, but
+**nothing dividing an impact measure by disposals**. And explicit ratios are
+one of the few feature-engineering moves with a principled case for helping a
+GBM: a tree splits on thresholds of single features, so it cannot represent
+`x / y` natively — approximating one means carving the joint space with many
+axis-aligned splits.
+
+**The features separate the target population cleanly.** Low-disposal games
+(bottom 40%, n = 34,944), split by whether the player polled:
+
+| | impact/disposal | score inv/disposal | vs. match mean |
+|---|---:|---:|---:|
+| did not poll (34,609) | 4.077 | 0.306 | +0.395 |
+| **polled (335)** | **5.896** | **0.599** | **+2.225** |
+
+45% higher impact per disposal, double the score involvements per disposal,
+and 5.6x further above their own match's mean. The construct measures what it
+claims to.
+
+**And it does not move the score: -0.00024 against a 0.00083 bar.** Not
+adopted — also because the new arm's seed variance nearly doubled (sd 0.00051
+against 0.00028), so six extra features bought an undecidable gain at the cost
+of a less stable model.
+
+### The arithmetic that reframes everything else
+
+**335 of 34,944 low-disposal games poll — about 1%.** Handling that population
+perfectly cannot move an RMSE averaged over 9,522 rows. This is not a comment
+on these features; it is a property of the metric. A feature that fixes a rare
+profile is mathematically incapable of shifting the aggregate much, however
+well it works.
+
+That retrospectively explains the other three nulls, all of which targeted
+concentrated populations: team form vs pre-season expectation (Sec 5m's Gold
+Coast case, ~25 rows), in-season momentum, and `player_position`. Each was
+aimed at the hard cases, and the hard cases are rare by construction.
+
+**So the remaining gains are unlikely to come from better handling of hard
+cases.** They will come from the measurement layer — which has yielded every
+improvement this project has banked (Sec 5g, 5j, 5k: -0.00042, -0.00055,
+-0.00042) — or from something that shifts many rows slightly. Sec 3's miss
+table is the right diagnosis of where the model is *wrong*, and the wrong guide
+to where the score is *available*. Those are different questions and this
+document has conflated them.
+
 ## 6. Codebase review
 
 28 files, 13,842 lines in `R/`, 173 exported functions.
