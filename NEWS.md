@@ -3,6 +3,16 @@
 This file starts at 0.2.0. Earlier versions are documented in the commit
 history and in `POSTMORTEM-2025.md`.
 
+# brownlow 0.2.4
+
+Housekeeping only; no change to the model or its output (2025 holdout RMSE
+stays 0.35530).
+
+* Twelve one-off PowerShell runners consolidated into `run_chain.ps1`, which
+  takes `-Steps` and `-LogName` and stops at the first failing step.
+* `RUNBOOK.md` updated for the 5-seed averaged `05` and the stricter `06`
+  staleness stop, and now opens with a next-session handover block.
+
 # brownlow 0.2.3
 
 2025 holdout RMSE 0.35546 -> 0.35530.
