@@ -20,6 +20,11 @@ devtools::load_all()
 set.seed(42)
 theme_set(theme_minimal())
 
+# Seeds averaged for the shipped probabilities. Five captures most of the
+# available variance reduction — ten buys only a further 0.00002 — at half the
+# fits. Raise it if compute is free; the returns diminish rather than vanish.
+PRODUCTION_SEEDS <- 1:5
+
 ## Configuration parameters ----
 rerun_tuning <- FALSE  # Set to TRUE to force hyperparameter tuning rerun
 
@@ -263,10 +268,27 @@ all_data <- bind_rows(prepared_data$train, prepared_data$test, prepared_data$hol
 # Generate XGBoost probabilities for all seasons from the PRODUCTION model.
 # xgboost >= 2.1 returns the multi-class matrix already shaped; the old
 # reshape = TRUE argument has been removed.
-xgb_probs <- as_prob_matrix(
-  predict(production_model, as.matrix(all_data[, prepared_data$feature_cols])),
-  nrow(all_data)
+# Averaged over seeds rather than taken from the single production_model fit.
+# Across 10 seeds the 2025 holdout RMSE ranged 0.35464-0.35664 -- a spread of
+# 0.00200, larger than every improvement this project has banked combined. A
+# single set.seed(42) draw made the submission a lottery. Averaging removes it
+# and beats the expected single seed by 0.00028. See R/seed_averaging.R and
+# POSTMORTEM Sec 5p.
+#
+# production_model is still trained above and still ships: it is the object
+# used for variable importance, and it is the first of the averaged fits.
+cat(sprintf("Averaging XGBoost probabilities over %d seeds...\n", length(PRODUCTION_SEEDS)))
+seed_avg <- train_seed_averaged_xgboost(
+  train_data   = dplyr::bind_rows(prepared_data$train, prepared_data$test),
+  newdata      = all_data,
+  feature_cols = prepared_data$feature_cols,
+  target_col   = prepared_data$target_col,
+  params       = tuning_results$best_params,
+  nrounds      = tuning_results$best_iteration,
+  seeds        = PRODUCTION_SEEDS,
+  verbose      = TRUE
 )
+xgb_probs <- seed_avg$prob_matrix
 
 # Apply probability normalization to ensure 6 votes per match
 cat("Normalizing XGBoost probabilities...\n")
