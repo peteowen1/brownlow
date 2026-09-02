@@ -1,10 +1,16 @@
-#' Ensemble Prediction and Optimization Utilities
-#'
-#' This module provides utility functions for optimizing ensemble weights,
-#' combining model predictions, and generating final ensemble predictions.
+# Ensemble Prediction and Optimization Utilities
+#
+# Optimising ensemble weights, combining model predictions, and generating
+# final ensemble predictions.
+#
+# Plain comments, NOT roxygen: as a `#'` block with no object beneath it, this
+# was adopted by whichever function came next, overwriting that function's
+# title and prepending this boilerplate to its description. Caught in review
+# when it corrupted select_ensemble_weight()'s help page.
 
 #' Select a Two-Model Blend Weight
 #'
+#' @description
 #' Scans a grid of weights and returns the one minimising `metric`. Deliberately
 #' takes probability matrices rather than a `model_results` object: this
 #' function cannot reach for data on its own, so whether the selection is

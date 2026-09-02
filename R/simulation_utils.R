@@ -1,7 +1,7 @@
-#' Simulation Utilities for Brownlow Medal Prediction
-#'
-#' This file contains utility functions for Monte Carlo simulation of Brownlow Medal seasons,
-#' including vote sampling, constraint handling, and results analysis.
+# Simulation Utilities for Brownlow Medal Prediction
+#
+# This file contains utility functions for Monte Carlo simulation of Brownlow Medal seasons,
+# including vote sampling, constraint handling, and results analysis.
 
 #' Sample Votes for a Player Based on Probability Distribution
 #'

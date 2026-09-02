@@ -2,7 +2,7 @@
 % Please edit documentation in R/simulation_utils.R
 \name{sample_player_votes}
 \alias{sample_player_votes}
-\title{Simulation Utilities for Brownlow Medal Prediction}
+\title{Sample Votes for a Player Based on Probability Distribution}
 \usage{
 sample_player_votes(prob_vector, n_samples = 1)
 }
@@ -15,10 +15,5 @@ sample_player_votes(prob_vector, n_samples = 1)
 Vector of sampled votes
 }
 \description{
-This file contains utility functions for Monte Carlo simulation of Brownlow Medal seasons,
-including vote sampling, constraint handling, and results analysis.
-Sample Votes for a Player Based on Probability Distribution
-}
-\details{
 Samples votes (0, 1, 2, 3) for a single player based on their probability distribution
 }

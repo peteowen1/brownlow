@@ -1,7 +1,7 @@
-#' Prediction Utilities for Brownlow Medal Models
-#'
-#' This file contains utility functions for making predictions, handling constraints,
-#' creating ensembles, and generating submission files.
+# Prediction Utilities for Brownlow Medal Models
+#
+# This file contains utility functions for making predictions, handling constraints,
+# creating ensembles, and generating submission files.
 
 #' Make Constrained Predictions
 #'

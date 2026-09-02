@@ -2,7 +2,7 @@
 % Please edit documentation in R/ensemble_utils.R
 \name{select_ensemble_weight}
 \alias{select_ensemble_weight}
-\title{Ensemble Prediction and Optimization Utilities}
+\title{Select a Two-Model Blend Weight}
 \usage{
 select_ensemble_weight(
   prob_list,
@@ -33,11 +33,6 @@ List with `weight` (for the first model), `score`, `metric` and the
   full `curve`
 }
 \description{
-This module provides utility functions for optimizing ensemble weights,
-combining model predictions, and generating final ensemble predictions.
-Select a Two-Model Blend Weight
-}
-\details{
 Scans a grid of weights and returns the one minimising `metric`. Deliberately
 takes probability matrices rather than a `model_results` object: this
 function cannot reach for data on its own, so whether the selection is

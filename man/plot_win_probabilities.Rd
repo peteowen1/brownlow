@@ -2,7 +2,7 @@
 % Please edit documentation in R/simulation_visualization.R
 \name{plot_win_probabilities}
 \alias{plot_win_probabilities}
-\title{Visualization Functions for Brownlow Medal Simulation Results}
+\title{Create Win Probability Bar Chart}
 \usage{
 plot_win_probabilities(
   player_stats,
@@ -27,10 +27,5 @@ plot_win_probabilities(
 ggplot object
 }
 \description{
-This file contains functions to create comprehensive visualizations of Monte Carlo
-simulation results for Brownlow Medal predictions.
-Create Win Probability Bar Chart
-}
-\details{
 Creates a horizontal bar chart showing win probabilities for top players
 }

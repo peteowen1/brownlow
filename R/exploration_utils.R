@@ -1,7 +1,7 @@
-#' Data Exploration Utilities
-#'
-#' This module provides comprehensive utility functions for AFL Brownlow Medal data exploration
-#' and analysis, extracting complex logic from the main exploration script.
+# Data Exploration Utilities
+#
+# This module provides comprehensive utility functions for AFL Brownlow Medal data exploration
+# and analysis, extracting complex logic from the main exploration script.
 
 #' Run Comprehensive Data Exploration
 #'
