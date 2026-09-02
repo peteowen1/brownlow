@@ -461,6 +461,44 @@ Four net negative, one (this one) negative-but-improving-and-heterogeneous. Not
 pursued further this session; the 2022/2025 pattern is the one thread worth
 returning to if this is picked back up.
 
+## 5b. Why it doesn't help: Matt Rowell, round by round
+
+Direct check per Pete's request: for Rowell specifically (39 votes, WON 2025),
+does the live model's expected total move toward the truth as real results
+come in? `analysis/rowell_live_vs_datathon.R`.
+
+```
+             actual  datathon  live
+Matt Rowell     39     26.13   26.44
+```
+
+Barely moved — 0.3 votes, nowhere near the ~30 the intuition "it has real
+in-play information, it should be much closer" predicts. Top-15 aggregate is a
+small, mixed positive (MAE 3.844 -> 3.667, 7 of 15 players improved) — not the
+clean win either hypothesis expected.
+
+The round-by-round trajectory (`analysis/harness/rowell_round_by_round.csv`)
+rules out the first guess (his hauls came late, diluting a season-long sum):
+his `inseason_overperformance` — cumulative actual votes minus the model's own
+cumulative expectation — was already 4.8 by round 4 and 12.2 by round 9,
+staying elevated at 10-14 for the rest of the season. The signal was present,
+large, and persistent almost the whole year. The model's round-by-round
+predictions barely differ from the pre-season ones in any single round despite
+that signal sitting right there as an input feature.
+
+**Why: this ties directly back to the original persistence regression (§1).**
+That found the relationship real (pooled t=4.78) but R-sq = 0.019 — it explains
+under 2% of back-half variance. A signal that weak is exactly what a properly
+regularised model, trained on 2017-2024, should learn to mostly ignore:
+historically, a player far ahead of expectation usually regresses rather than
+keeps accumulating proportionally. Rowell's case is spectacular in hindsight —
+the momentum did keep paying off for him — but one dramatic case does not mean
+the general historical relationship was strong enough to justify a model
+leaning on it. The model is not broken; it is making the statistically
+defensible call given weak historical evidence, and that call happens to be
+wrong for this one player. This closes the in-count workstream for now with an
+actual mechanism, not just a null result.
+
 ## 6. Order of work
 
 1. Populate the eligibility register from an authoritative source, and wire
