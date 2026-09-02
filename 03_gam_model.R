@@ -7,6 +7,7 @@
 ## Load required libraries ----
 library(mgcv)
 library(dplyr)
+library(readr)
 library(tidyr)
 library(ggplot2)
 library(gridExtra)
@@ -292,9 +293,10 @@ cat(sprintf(" ✓ Log-loss: %.3f, Deviance: %.1f%%, Test accuracy: %.1f%%\n",
 
 cat("Retraining production GAM model on complete dataset...")
 
-# Combine all available data (training + test)
+# Combine all available data (training + test), dropping only the season we are
+# predicting. Never hardcode a year here: in 2026 that silently discards 2025.
 complete_gam_data <- bind_rows(gam_data_train, gam_data_test_clean) %>%
-  dplyr::filter(season != 2025)  # Exclude any incomplete future seasons
+  dplyr::filter(!season %in% prepared_data$holdout_seasons)
 
 cat(sprintf(" using %d observations from all seasons\n", nrow(complete_gam_data)))
 
@@ -327,19 +329,17 @@ gam_all_data <- prepare_gam_training_data(
 # Generate GAM probabilities for all seasons
 gam_probs <- predict(production_gam_model, newdata = gam_all_data, type = "response")
 
-# Convert to probability matrix (simplified approach)
-if (is.vector(gam_probs)) {
-  # Simple fallback: create probability distributions based on predictions
-  gam_prob_matrix <- matrix(0, nrow = length(gam_probs), ncol = 4)
-
-  # Vectorized approach instead of for loop
-  pred_vals <- pmax(0, pmin(3, round(gam_probs)))
-
-  # Create one-hot encoding
-  gam_prob_matrix[cbind(1:length(gam_probs), pred_vals + 1)] <- 1
-} else {
-  gam_prob_matrix <- gam_probs
-}
+# ocat(R = 4) returns an n x 4 matrix of class probabilities. Anything else means
+# the family changed, and the old fallback here silently replaced calibrated
+# probabilities with a hard one-hot encoding of the rounded point prediction —
+# which is a valid probability row, so every downstream constraint check would
+# still have passed while the ensemble quietly went to pieces.
+stopifnot(
+  "GAM predictions must be a matrix; check the model family is ocat(R = 4)" =
+    is.matrix(gam_probs),
+  "GAM predictions must have one column per vote class" = ncol(gam_probs) == 4
+)
+gam_prob_matrix <- gam_probs
 
 # Apply probability normalization to ensure 6 votes per match
 cat("Normalizing GAM probabilities...\n")

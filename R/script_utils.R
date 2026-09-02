@@ -351,7 +351,7 @@ process_xgboost_predictions <- function(raw_pred, n_obs) {
   if (is.matrix(raw_pred)) {
     return(raw_pred)
   } else if (length(raw_pred) == n_obs * 4) {
-    return(matrix(raw_pred, nrow = n_obs, ncol = 4, byrow = TRUE))
+    return(as_prob_matrix(raw_pred, n_obs))
   } else {
     # Convert regression to probabilities
     expected_votes <- pmax(0, pmin(3, raw_pred))

@@ -1,7 +1,7 @@
 Package: brownlow
 Type: Package
 Title: Brownlow Medal Prediction Models
-Version: 0.1.0
+Version: 0.1.1
 Authors@R: c(
     person(
       "Your", "Name",
@@ -51,5 +51,5 @@ Suggests:
     rmarkdown,
     testthat (>= 3.0.0),
     devtools
-RoxygenNote: 7.3.2
+RoxygenNote: 7.3.3
 VignetteBuilder: knitr

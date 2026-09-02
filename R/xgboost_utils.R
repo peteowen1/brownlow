@@ -404,9 +404,11 @@ prepare_xgboost_predictions <- function(final_model = NULL, train_data = NULL, t
     )
     test_pred <- predict(final_model, dtest_matrix)
 
-    # Reshape probability matrices
-    train_pred_matrix <- matrix(train_pred, nrow = nrow(train_data), byrow = TRUE)
-    test_pred_matrix <- matrix(test_pred, nrow = nrow(test_data), byrow = TRUE)
+    # Coerce to n x 4. Do NOT call matrix(..., byrow = TRUE) unconditionally:
+    # xgboost >= 2.1 already returns a matrix, and reshaping it scrambles every
+    # row while leaving the column means intact.
+    train_pred_matrix <- as_prob_matrix(train_pred, nrow(train_data))
+    test_pred_matrix  <- as_prob_matrix(test_pred,  nrow(test_data))
     colnames(train_pred_matrix) <- paste0("Prob_", 0:3, "_votes")
     colnames(test_pred_matrix) <- paste0("Prob_", 0:3, "_votes")
 
@@ -575,7 +577,9 @@ evaluate_xgboost_performance <- function(predictions, train_data, test_data, fin
 
 #' Train Production XGBoost Model
 #'
-#' Trains final production model on complete dataset for deployment.
+#' Trains the model that actually ships, on every season available for training
+#' (train + test), after `final_model` has been used for honest evaluation on the
+#' test seasons. This is the model whose probabilities go into the submission.
 #'
 #' @param train_data Training data
 #' @param test_data Test data
@@ -583,18 +587,29 @@ evaluate_xgboost_performance <- function(predictions, train_data, test_data, fin
 #' @param target_col Target column name
 #' @param best_params Optimal hyperparameters
 #' @param best_iteration Optimal number of rounds
+#' @param exclude_seasons Seasons to drop before training, e.g. a season whose
+#'   votes are not yet known. Default NULL keeps every season.
 #' @param verbose Logical, whether to show progress messages
 #'
 #' @return Trained production model
 #' @export
 train_production_xgboost <- function(train_data, test_data, feature_cols, target_col,
-                                    best_params, best_iteration, verbose = TRUE) {
+                                    best_params, best_iteration, exclude_seasons = NULL,
+                                    verbose = TRUE) {
   if (verbose) cat("Retraining production model on complete dataset...")
 
-  complete_dataset <- dplyr::bind_rows(train_data, test_data) %>%
-    dplyr::filter(season != 2025)  # Exclude any incomplete future seasons
+  complete_dataset <- dplyr::bind_rows(train_data, test_data)
 
-  if (verbose) cat(sprintf(" using %d observations from all seasons\n", nrow(complete_dataset)))
+  if (!is.null(exclude_seasons)) {
+    complete_dataset <- complete_dataset %>%
+      dplyr::filter(!season %in% exclude_seasons)
+  }
+
+  if (verbose) {
+    cat(sprintf(" using %d observations from seasons %s\n",
+                nrow(complete_dataset),
+                paste(sort(unique(complete_dataset$season)), collapse = ", ")))
+  }
 
   # Train production model with same optimal hyperparameters
   production_model <- train_final_xgboost(

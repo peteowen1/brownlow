@@ -125,14 +125,36 @@ gam_weight <- ensemble_weights_values[2]
 
 cat(sprintf("Ensemble weights: XGBoost=%.3f, GAM=%.3f\n", xgb_weight, gam_weight))
 
-# Create ensemble probabilities by weighted combination
-ensemble_prob_df <- xgboost_prob_df %>%
-  select(player_name, team, date, match_id, season, brownlow_votes) %>%
+# Create ensemble probabilities by weighted combination.
+#
+# JOIN, do not bind by position. These two frames are built by separate scripts
+# (03 and 05) from separately prepared data; that they happen to share a row
+# order today is luck, not a guarantee. A reordering in either would silently
+# pair one player's XGBoost probabilities with another's GAM probabilities, and
+# nothing downstream would notice — the result still normalises to 6 votes per
+# match and passes every constraint check.
+combined <- xgboost_prob_df %>%
+  select(player_name, team, date, match_id, season, brownlow_votes,
+         dplyr::starts_with("xgboost_prob_")) %>%
+  inner_join(
+    gam_prob_df %>% select(player_name, team, date, match_id,
+                           dplyr::starts_with("gam_prob_")),
+    by = c("player_name", "team", "date", "match_id")
+  )
+
+if (nrow(combined) != nrow(xgboost_prob_df)) {
+  stop(sprintf(paste0("Ensemble join changed the row count: %d -> %d. ",
+                      "Either the two model outputs disagree on their rows, or ",
+                      "(player, team, date, match_id) is not unique."),
+               nrow(xgboost_prob_df), nrow(combined)))
+}
+
+ensemble_prob_df <- combined %>%
   mutate(
-    ensemble_prob_0 = xgb_weight * xgboost_prob_df$xgboost_prob_0 + gam_weight * gam_prob_df$gam_prob_0,
-    ensemble_prob_1 = xgb_weight * xgboost_prob_df$xgboost_prob_1 + gam_weight * gam_prob_df$gam_prob_1,
-    ensemble_prob_2 = xgb_weight * xgboost_prob_df$xgboost_prob_2 + gam_weight * gam_prob_df$gam_prob_2,
-    ensemble_prob_3 = xgb_weight * xgboost_prob_df$xgboost_prob_3 + gam_weight * gam_prob_df$gam_prob_3,
+    ensemble_prob_0 = xgb_weight * xgboost_prob_0 + gam_weight * gam_prob_0,
+    ensemble_prob_1 = xgb_weight * xgboost_prob_1 + gam_weight * gam_prob_1,
+    ensemble_prob_2 = xgb_weight * xgboost_prob_2 + gam_weight * gam_prob_2,
+    ensemble_prob_3 = xgb_weight * xgboost_prob_3 + gam_weight * gam_prob_3,
     ensemble_expected_votes = ensemble_prob_0 * 0 + ensemble_prob_1 * 1 + ensemble_prob_2 * 2 + ensemble_prob_3 * 3
   )
 

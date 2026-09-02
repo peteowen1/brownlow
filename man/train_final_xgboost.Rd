@@ -4,13 +4,7 @@
 \alias{train_final_xgboost}
 \title{Train Final XGBoost Model}
 \usage{
-train_final_xgboost(
-  train_data,
-  feature_cols,
-  target_col,
-  params,
-  nrounds = NULL
-)
+train_final_xgboost(train_data, feature_cols, target_col, params, nrounds)
 }
 \arguments{
 \item{train_data}{DataFrame with training data}
@@ -19,13 +13,15 @@ train_final_xgboost(
 
 \item{target_col}{Character. Target column name}
 
-\item{params}{List. Model parameters}
+\item{params}{List. Model parameters from hyperparameter tuning}
 
-\item{nrounds}{Integer. Number of boosting rounds (default: 1000)}
+\item{nrounds}{Integer. Number of boosting rounds from hyperparameter tuning (required)}
 }
 \value{
 Trained XGBoost model
 }
 \description{
-Trains the final XGBoost model with best parameters
+Trains the final XGBoost model with best parameters and optimal number of rounds.
+The nrounds parameter should come from hyperparameter tuning results to ensure
+consistency with the tuning phase.
 }
