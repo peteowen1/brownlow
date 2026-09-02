@@ -2,6 +2,7 @@
 
 S3method(print,brownlow_model_results)
 export("%>%")
+export(add_efficiency_features)
 export(add_gam_probability_predictions)
 export(add_in_season_vote_features)
 export(add_match_context_features)
