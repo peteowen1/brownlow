@@ -2,38 +2,82 @@
 
 ## Next session starts here
 
-**State as of 3 September 2026.** Shipped model scores **0.35530** on the 2025
-holdout (was 0.35836 on 2 September), verified end to end across all 9,522 rows
-with 1242.0 predicted votes against 1242 actual. `main` is at v0.2.3, `dev`
-fully merged, tree clean. Everything below is queued, not started.
+**State as of 12 September 2026.** The 2026 submission is built, correct, and
+merged (`main` at v0.2.7, `dev` fully merged, tree clean). Registered as
+**InTheGame** (Discord `random_effects153`). Everything below is either done,
+queued, or explicitly left for Pete.
 
-1. **Flip `TARGET_SEASON` to 2026 in `09_submission_predictions.R`** once the
-   template lands (**by 8 September**). Section 1 below has the checks. One
-   line, but the whole submission depends on it.
-2. **Covariate shift from the 2026 rule changes** — the largest untouched item.
-   No centre bounce, no sub, last-disposal free kicks all move the stat
-   distributions the features are built on. §5o handled the two composites most
-   exposed (`supercoach_score`, `afl_fantasy_score`); the raw affected features
-   carry only 1.6% of gain, so this may be nearly done — measure before
-   building.
-3. **Single-seed vs averaged asymmetry.** Production averages 5 seeds; the
-   walk-forward weight arms in `analysis/ensemble_weight_walkforward.R` are
-   still single-seed. ~45 min to fix, on a weight curve flat across 0.30-0.55,
-   so genuinely second-order. Deliberately skipped, not overlooked.
+**Where it stands (verified, not assumed):**
+- `submissions/Brownlow_Medal_Datathon_2026_Submission_Form_V2_InTheGame.csv`
+  is the file to send: 9,522 rows, every one of 207 matches totals 6.0 votes,
+  columns match the organiser's template exactly.
+- Nick Daicos is the clear favourite: **42.04 predicted votes**, **94.2% win
+  probability**, 99.9% top-5 (2,000-run simulation,
+  `results/brownlow_dashboard_data_2026.json` — this is a fresh Monte Carlo
+  draw each rebuild, so expect it to move a fraction of a point run to run;
+  don't treat the decimal as more precise than that).
+- Honest generalisation estimate is now the **walk-forward 2023-24 RMSE,
+  0.397572** (`analysis/harness/ensemble_weight_walkforward.csv`), not a 2025
+  holdout figure — 2025 is now correctly folded into training (see below), so
+  there is no clean holdout season left except 2026 itself, which has no
+  known votes to score against.
+- An **email draft is already sitting in Outlook** (`pete.owen1@hotmail.co.uk`,
+  subject "Brownlow Datathon 2026 submission - InTheGame", to
+  `datathon@betfair.com.au`) — it needs the CSV attached and sending. A
+  reminder is set in MS To-Do (`AFL` list) for 20 September so this doesn't
+  get missed.
 
-**Do not** reach for new features without first measuring what fraction of rows
-they can touch — see `POSTMORTEM-2025.md` §5n. Five feature ideas measured null
-this session; every banked gain came from the measurement layer.
+**What actually happened this session (2026-09-11/12), for context on why the
+numbers moved from whatever an older session remembers:**
+1. The 2026 template and raw feed both changed schema (dropped `match_id`/
+   `match_date`, renumbered every `player_id`, changed 15 players' names,
+   stripped punctuation from surnames). Fixed in `09_submission_predictions.R`
+   and `R/evaluation_harness.R` — PR #8.
+2. **Serious bug found and fixed**: `prepare_modeling_data()`'s
+   `holdout_seasons` default was a stale `c(2025)`, so 2026's placeholder
+   zero-vote rows (9,522 of them, 12.2% of training) were being trained on as
+   if they were real "0 votes" outcomes. Fixed by passing `holdout_seasons =
+   c(2026)` explicitly in `02_base_feature_engineering.R` — **update this
+   every year**, it will recur exactly the same way in 2027 otherwise. PR #9.
+   Removing the leak moved Daicos's predicted votes 29.75 -> 42.17 and win
+   probability 73.6% -> 94.8%.
+3. `normalize_probability_matrix()` rewritten from a scalar per-player loop
+   (183-190 sec, never fully converged) to vectorised Sinkhorn/IPF matching
+   `normalize_votes_ipf()` (~24 sec, exact convergence). Pure speed win,
+   verified RMSE-neutral. PR #10.
+4. `07_season_predictions.R` and `08_brownlow_simulation.R` had never been
+   run for a genuinely in-progress future season before (only past seasons
+   already resolved into test/val) — both had latent bugs (an undefined
+   variable, and season-routing that didn't know about the holdout split)
+   that only surfaced today. Fixed as part of PR #9.
 
-**Undecided, needs Pete:** the match-relative composites (§5o) were adopted on
-reasoning, not evidence — end-to-end gain was 0.00010 against the 0.00041 the
-harness suggested when it was recommended. Reverting is one line in `02` plus a
-chain rerun. Left in on the 2026 shift-robustness argument, which cannot be
-tested until 2026 data exists.
+**Queued, not started:**
+- **Single-seed vs averaged asymmetry** (carried over from 3 September,
+  still true): production averages 5 seeds; the walk-forward weight arms in
+  `analysis/ensemble_weight_walkforward.R` are still single-seed. ~45 min fix,
+  on a weight curve flat across 0.30-0.55, so genuinely second-order.
+- Two pre-existing broken demo/test call sites, confirmed unrelated to
+  anything this session touched: `test_probability_normalization.R`'s Test 4
+  calls `apply_match_probability_constraints(..., return_full_results = TRUE)`,
+  an argument that function doesn't accept (present since the initial
+  commit); `demo_probability_normalization.R`'s Example 2 calls
+  `normalize_ensemble_probabilities()`, which no longer exists anywhere in
+  `R/`. Neither affects the pipeline. Not fixed — flagged and left.
+- `prepare_full_training_data()` and `R/enhanced_datathon_data.R`'s dead
+  first `enhance_datathon_data()` definition were both cleaned up (PR #10),
+  no further action.
 
+**Undecided, needs Pete:** the match-relative composites (§5o in
+`POSTMORTEM-2025.md`) were adopted on reasoning, not evidence — end-to-end
+gain was 0.00010 against the 0.00041 the harness suggested. Reverting is one
+line in `02` plus a chain rerun. Left in on the 2026 shift-robustness
+argument; 2026 data now exists to actually test this, but it hasn't been
+re-measured since it landed.
 
-**Deadline: 2:59pm AEST, Monday 21 September 2026.** Template released no later
-than **8 September 2026**. Registration closes 17 September.
+**Deadline: 2:59pm AEST, Monday 21 September 2026** (Discord announcement
+says 3pm — treat as the same cutoff, submit well before either). Registration
+closed 17 September. Submission is by **email**, not a portal — see
+`datathon-2026-registration` memory for the full mechanism.
 
 Written 2026-09-02, after a full clean rerun, so every timing below is measured
 rather than estimated. The whole pipeline is ~15 minutes. The risk on the day is
