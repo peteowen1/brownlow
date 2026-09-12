@@ -240,32 +240,6 @@ cat(sprintf(" ✓ Normalized Log-loss: %.3f, Test accuracy: %.1f%% -> %.1f%%, To
             test_metrics_norm$overall_accuracy * 100,
             evaluation_results$importance$Feature[1]))
 
-# Retrain Production Model ####
-
-# final_model above saw only the train seasons, so its test-season metrics are
-# honest. It must NOT be the model that ships: it has never seen the two most
-# recent completed seasons. production_model is refit on train + test.
-#
-# It is used ONLY for xgb.importance() below -- NOT for the shipped
-# probabilities, which come from the 5-seed average further down (Sec 5p).
-# production_model itself carries no explicit seed at this point in the
-# script, so its own fit is exactly the "arbitrary constant" the seed-averaging
-# section exists to stop shipping; it is fine for a gain-ranking, which is
-# stable across seeds, and would not be fine as the submission.
-production_model <- train_production_xgboost(
-  train_data = prepared_data$train,
-  test_data = prepared_data$test,
-  feature_cols = prepared_data$feature_cols,
-  target_col = prepared_data$target_col,
-  best_params = tuning_results$best_params,
-  best_iteration = tuning_results$best_iteration,
-  exclude_seasons = prepared_data$holdout_seasons,
-  verbose = TRUE
-)
-
-imp <- xgboost::xgb.importance(model = production_model)
-imp %>% tibble::as_tibble() %>% dplyr::arrange(dplyr::desc(Gain)) %>% print(n = 50)
-
 # Save XGBoost Probability DataFrame ####
 cat("\n=== SAVING XGBOOST PROBABILITIES ===\n")
 
@@ -274,18 +248,11 @@ all_data <- bind_rows(prepared_data$train, prepared_data$test, prepared_data$hol
 # Generate XGBoost probabilities for all seasons from the PRODUCTION model.
 # xgboost >= 2.1 returns the multi-class matrix already shaped; the old
 # reshape = TRUE argument has been removed.
-# Averaged over seeds rather than taken from the single production_model fit.
-# Across 10 seeds the 2025 holdout RMSE ranged 0.35464-0.35664 -- a spread of
-# 0.00200, larger than every improvement this project has banked combined. A
-# single set.seed(42) draw made the submission a lottery. Averaging removes it
-# and beats the expected single seed by 0.00028. See R/seed_averaging.R and
-# POSTMORTEM Sec 5p.
-#
-# production_model above is NOT part of this average and does not ship -- it
-# is a separate, single-arbitrary-seed fit used only for xgb.importance().
-# Caught in review: an earlier version of this comment claimed it was "the
-# first of the averaged fits", which was false and hid the exact seed-lottery
-# problem this section exists to remove.
+# Averaged over seeds. Across 10 seeds the 2025 holdout RMSE ranged
+# 0.35464-0.35664 -- a spread of 0.00200, larger than every improvement this
+# project has banked combined. A single set.seed(42) draw made the submission
+# a lottery. Averaging removes it and beats the expected single seed by
+# 0.00028. See R/seed_averaging.R and POSTMORTEM Sec 5p.
 cat(sprintf("Averaging XGBoost probabilities over %d seeds...\n", length(PRODUCTION_SEEDS)))
 seed_avg <- train_seed_averaged_xgboost(
   train_data   = dplyr::bind_rows(prepared_data$train, prepared_data$test),
@@ -299,14 +266,30 @@ seed_avg <- train_seed_averaged_xgboost(
 )
 xgb_probs <- seed_avg$prob_matrix
 
+# Variable importance and the "production" model artifact 07/08 load, reusing
+# seed_avg$model (the first of the 5 averaged fits) instead of a 7th, fully
+# redundant xgb.train() call that existed only for these two things. Removed
+# 2026-09-11 after review found it: same train+test data, same best_params/
+# best_iteration as every seed_avg fit, and its own RNG state was already
+# documented here as "an arbitrary constant" -- gain ranking is stable across
+# seeds (POSTMORTEM Sec 5i), so seed 1 is as good a source as the one this
+# replaced, and now has an explicit seed instead of an implicit one.
+imp <- xgboost::xgb.importance(model = seed_avg$model)
+imp %>% tibble::as_tibble() %>% dplyr::arrange(dplyr::desc(Gain)) %>% print(n = 50)
+saveRDS(seed_avg$model, "models/xgboost_production_model.rds")
+
 # Apply probability normalization to ensure 6 votes per match
 cat("Normalizing XGBoost probabilities...\n")
-xgb_norm_result <- normalize_probability_matrix(
-  prob_matrix = xgb_probs,
-  match_ids = all_data$match_id,
-  max_votes_per_match = 6,
-  verbose = TRUE
-)
+normalize_timing <- system.time({
+  xgb_norm_result <- normalize_probability_matrix(
+    prob_matrix = xgb_probs,
+    match_ids = all_data$match_id,
+    max_votes_per_match = 6,
+    verbose = TRUE
+  )
+})
+cat(sprintf(" normalize_probability_matrix() took %.1f sec over %d rows / %d matches\n",
+            normalize_timing["elapsed"], nrow(all_data), length(unique(all_data$match_id))))
 
 # Create XGBoost probability dataframe with normalized probabilities
 xgboost_prob_df <- all_data %>%
