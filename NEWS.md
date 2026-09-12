@@ -3,6 +3,14 @@
 This file starts at 0.2.0. Earlier versions are documented in the commit
 history and in `POSTMORTEM-2025.md`.
 
+# brownlow 0.2.8
+
+Documentation only; no code change. `RUNBOOK.md`'s "Next session starts
+here" block described the pre-2026-data state from 3 September -- replaced
+with the actual current state (submission ready, training leak fixed,
+normalizer speedup shipped, what's still queued), every number checked
+against the artifact it came from rather than memory.
+
 # brownlow 0.2.7
 
 `normalize_probability_matrix()` -- used on the model's critical path in
