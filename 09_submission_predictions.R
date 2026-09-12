@@ -57,8 +57,8 @@ ensemble_target <- ensemble_target_raw %>%
     full_player_name = player_name,  # Keep original player name for joining
     team_key = standardize_team_name(team)
   ) %>%
-  select(full_player_name, team_key, match_id,
-         ensemble_prob_0, ensemble_prob_1, ensemble_prob_2, ensemble_prob_3)
+  dplyr::select(full_player_name, team_key, match_id,
+                ensemble_prob_0, ensemble_prob_1, ensemble_prob_2, ensemble_prob_3)
 
 ## Recover match_id for the submission form ----
 # The 2026 form dropped match_date entirely, so match_id can't be built
@@ -202,7 +202,7 @@ write_csv(submission_final, output_file)
 # name substituted into the organiser's naming convention.
 upload_file <- sprintf("submissions/Brownlow_Medal_Datathon_%d_Submission_Form_V2_%s.csv",
                         TARGET_SEASON, MODEL_NAME)
-write_csv(submission_final %>% select(all_of(names(submission_form))), upload_file)
+write_csv(submission_final %>% dplyr::select(dplyr::all_of(names(submission_form))), upload_file)
 
 ## Summary ----
 total_votes <- sum(submission_final$brownlow_votes_prediction, na.rm = TRUE)
