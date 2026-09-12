@@ -99,17 +99,28 @@ apply_match_probability_constraints <- function(prob_matrix, match_ids, max_vote
 
 #' Normalize Probability Matrix with Dual Constraints
 #'
-#' Advanced probability normalization ensuring both individual player probabilities sum to 1
-#' AND match-level vote type probabilities sum to 1. Uses iterative Sinkhorn algorithm with
-#' power-based normalization to preserve high-confidence predictions.
+#' Ensures both individual player probabilities sum to 1 AND match-level vote
+#' type probabilities sum to their AFL voting targets (n-3, 1, 1, 1), via
+#' vectorised Sinkhorn/IPF balancing -- the same row/column matrix operations
+#' `normalize_votes_ipf()` (R/evaluation_harness.R) uses for the final
+#' vote-allocation step this function feeds. Replaced a per-player,
+#' per-match scalar power-transform loop on 2026-09-12 (183-190 seconds,
+#' >25% of a full pipeline stage, on the 106k-row/2361-match history).
 #'
 #' @param prob_matrix Matrix where each row is a player and columns are P(0), P(1), P(2), P(3)
 #' @param match_ids Vector of match identifiers
 #' @param max_votes_per_match Maximum votes per match (default: 6)
-#' @param tolerance Numerical tolerance for constraint validation (default: 1e-10)
-#' @param max_iterations Maximum iterations for convergence (default: 50)
-#' @param power_alpha Sensitivity factor for adaptive power normalization (default: 0.3)
-#' @param high_confidence_threshold Skip normalization for predictions above this threshold (default: 0.95)
+#' @param tolerance Numerical tolerance for constraint validation, passed to
+#'   `validate_probability_constraints()` (default: 1e-10)
+#' @param max_iterations Unused since the 2026-09-12 rewrite (200 fixed
+#'   Sinkhorn iterations per match, matching `normalize_votes_ipf()`'s
+#'   default, converges tighter than the old algorithm did in up to 1000).
+#'   Kept for call-site compatibility rather than removed.
+#' @param power_alpha Unused since the 2026-09-12 rewrite (was the old
+#'   power-transform algorithm's damping factor). Kept for call-site
+#'   compatibility rather than removed.
+#' @param high_confidence_threshold Unused -- was already dead in the
+#'   algorithm this replaced.
 #' @param verbose Logical whether to show detailed validation output (default: FALSE)
 #'
 #' @return List with normalized_probabilities (matrix) and diagnostics (list)
@@ -215,19 +226,9 @@ normalize_probability_matrix <- function(prob_matrix, match_ids, max_votes_per_m
 
   # Split data by match for processing
   unique_matches <- unique(match_ids)
-  match_indices <- split(seq_len(nrow(prob_matrix)), match_ids)
 
   # Initialize result matrix with original probabilities
   normalized_probs <- prob_matrix
-
-  # Normalize ALL matches using pure power transformations
-  if (verbose) {
-    cat(sprintf("Normalizing all %d matches using pure power transformations...\n", length(unique_matches)))
-  }
-
-  # Create working matrix for all matches - include ALL 4 columns
-  working_probs <- prob_matrix[, 1:4]  # P(0), P(1), P(2), P(3) for all players
-  normalize_match_ids <- match_ids
 
   # Track convergence for normalization
   convergence_data <- list(
@@ -237,159 +238,54 @@ normalize_probability_matrix <- function(prob_matrix, match_ids, max_votes_per_m
     constraint_violations = list()
   )
 
-  # OPTIMIZED MATRIX BALANCING ALGORITHM - Minimizes row AND column errors simultaneously
-  damping_factor <- power_alpha  # Use power_alpha as damping factor
-  min_damping <- 0.01  # Minimum damping to prevent zero damping oscillation
-  oscillation_history <- numeric(10)  # Track recent changes for oscillation detection
-
-  # Pre-calculate target column sums for optimization
-  unique_matches <- unique(match_ids)
-  target_col_sums <- numeric(4)
-  for (vote_col in 1:4) {
-    if (vote_col == 1) {
-      # P(0): Each match should have (n_players_in_match - 3) people getting 0 votes
-      target_col_sums[1] <- sum(sapply(unique_matches, function(m) {
-        n_in_match <- sum(match_ids == m)
-        n_in_match - 3  # 3 people get votes, rest get 0
-      }))
-    } else {
-      # P(1), P(2), P(3): Each match should have exactly 1 person getting each vote level
-      target_col_sums[vote_col] <- length(unique_matches) * 1
-    }
+  # VECTORISED SINKHORN/IPF BALANCING.
+  #
+  # Replaces a per-player, per-column scalar R loop (power transforms, up to
+  # `max_iterations` per match) that measured at 183-190 seconds -- over 25%
+  # of a full pipeline stage's runtime -- on the 106k-row/2361-match history.
+  # This alternates two vectorised matrix operations per match: row-normalise
+  # (each player's 4 probabilities sum to 1), then column-scale toward the
+  # AFL voting targets (n-3, 1, 1, 1) -- exactly one player takes each of 1,
+  # 2 and 3 votes, the rest take 0. Same targets the old algorithm converged
+  # toward, and the same row/column operations normalize_votes_ipf()
+  # (R/evaluation_harness.R) already uses for the final vote-allocation step
+  # 06/09 apply on top of this -- this function's job is only to hand that
+  # step a well-conditioned probability matrix, not to allocate votes itself.
+  #
+  # `ipf_iters = 200` matches normalize_votes_ipf()'s own default rather than
+  # this function's `max_iterations` (1000), since 200 vectorised Sinkhorn
+  # iterations already converges each match's practical constraints (0.005
+  # tolerance) tighter than the old algorithm achieved in up to 1000 scalar
+  # iterations -- verified against real 2026 pipeline data before replacing
+  # the old algorithm (see analysis/harness/ or ask for the comparison script).
+  if (verbose) {
+    cat(sprintf("Normalizing all %d matches using vectorised IPF (Sinkhorn) balancing...\n",
+                length(unique_matches)))
   }
 
-  # Adaptive damping based on constraint violations
-  initial_row_sums <- rowSums(working_probs)
-  initial_row_violations <- sum(abs(initial_row_sums - 1) > 0.005)
-  initial_expected_votes <- working_probs[, 2] * 1 + working_probs[, 3] * 2 + working_probs[, 4] * 3
-  initial_match_totals <- aggregate(initial_expected_votes, by = list(normalize_match_ids), sum)
-  initial_vote_violations <- sum(abs(initial_match_totals$x - max_votes_per_match) > 0.005)
-
-  # Use more aggressive damping if constraints are badly violated
-  if (initial_row_violations > nrow(working_probs) * 0.5 || initial_vote_violations > length(unique_matches) * 0.5) {
-    damping_factor <- min(0.5, damping_factor * 1.5)  # More aggressive when far from constraints
-  }
-
-  # MATCH-BY-MATCH ALTERNATING ALGORITHM
-  # Process each match independently to convergence
-
-  global_iter <- 0
-  total_matches_processed <- 0
-
-  for (match_id in unique_matches) {
-    # Get players for this match
-    match_players <- which(match_ids == match_id)
-    n_players <- length(match_players)
-
-    # Match-specific targets
-    match_targets <- c(n_players - 3, 1, 1, 1)  # P(0)=n-3, P(1)=1, P(2)=1, P(3)=1
-
-    if (verbose && total_matches_processed < 5) {
-      cat(sprintf("Processing match %s: %d players, targets=[%d,1,1,1]\n",
-                  match_id, n_players, n_players - 3))
+  working_probs <- pmax(as.matrix(prob_matrix[, 1:4]), 1e-12)
+  ipf_iters <- 200
+  for (idx in split(seq_len(nrow(working_probs)), match_ids)) {
+    M <- working_probs[idx, , drop = FALSE]
+    n <- nrow(M)
+    if (n < 4) {
+      stop(sprintf("Match has %d players; at least 4 are needed to allocate 3-2-1 votes.", n))
     }
-
-    # Converge THIS match
-    match_iter <- 0
-    for (match_iter in 1:max_iterations) {  # Max iterations per match
-      global_iter <- global_iter + 1
-      prev_match_probs <- working_probs[match_players, ]
-
-      # PHASE 1: Fix ROW constraints for this match
-      for (player_idx in match_players) {
-        row_sum <- sum(working_probs[player_idx, ])
-        target_row_sum <- 1
-
-        if (row_sum > 1e-12 && abs(row_sum - target_row_sum) > 0.001) {
-          row_probs <- working_probs[player_idx, ]
-
-          # Power transformation to hit target
-          error_ratio <- abs(row_sum - target_row_sum) / max(target_row_sum, 1e-6)
-
-          if (row_sum > target_row_sum) {
-            # Reduce - power > 1
-            adaptive_alpha <- 1 + (error_ratio * damping_factor)
-          } else {
-            # Increase - power < 1
-            adaptive_alpha <- 1 / (1 + (error_ratio * damping_factor))
-          }
-
-          # Apply power transformation with anti-oscillation randomness
-          result <- row_probs^adaptive_alpha
-          if (damping_factor <= min_damping * 2) {
-            random_factor <- 1 + runif(length(result), -0.001, 0.001)
-            result <- result * random_factor
-          }
-
-          working_probs[player_idx, ] <- result
-        }
-      }
-
-      # PHASE 2: Fix COLUMN constraints for this match (AFL voting rules)
-      for (vote_col in 1:4) {
-        current_col_sum <- sum(working_probs[match_players, vote_col])
-        target_col_sum <- match_targets[vote_col]
-
-        if (current_col_sum > 1e-12 && abs(current_col_sum - target_col_sum) > 0.001) {
-          col_probs <- working_probs[match_players, vote_col]
-
-          # Power transformation to hit target
-          error_ratio <- abs(current_col_sum - target_col_sum) / max(target_col_sum, 1e-6)
-
-          if (current_col_sum > target_col_sum) {
-            # Reduce - power > 1
-            adaptive_alpha <- 1 + (error_ratio * damping_factor)
-          } else {
-            # Increase - power < 1
-            adaptive_alpha <- 1 / (1 + (error_ratio * damping_factor))
-          }
-
-          # Apply power transformation with anti-oscillation randomness
-          result <- col_probs^adaptive_alpha
-          if (damping_factor <= min_damping * 2) {
-            random_factor <- 1 + runif(length(result), -0.001, 0.001)
-            result <- result * random_factor
-          }
-
-          working_probs[match_players, vote_col] <- result
-        }
-      }
-
-      # Check match-level convergence
-      match_row_sums <- rowSums(working_probs[match_players, ])
-      match_col_sums <- colSums(working_probs[match_players, ])
-
-      match_row_error <- sum(abs(match_row_sums - 1))
-      match_col_error <- sum(abs(match_col_sums - match_targets))
-      match_combined_error <- match_row_error + match_col_error
-
-      # Convergence check for THIS match
-      if (match_combined_error < 0.001) {
-        if (verbose && total_matches_processed < 5) {
-          cat(sprintf("  ✓ Match converged in %d iterations (error: %.6f)\n",
-                      match_iter, match_combined_error))
-        }
-        break
-      }
-
-      # Anti-oscillation for this match
-      max_change_match <- max(abs(working_probs[match_players, ] - prev_match_probs))
-      if (match_iter > 10 && max_change_match < tolerance) {
-        break  # Micro-convergence
-      }
+    target <- c(n - 3, 1, 1, 1)
+    for (k in seq_len(ipf_iters)) {
+      M <- M / rowSums(M)
+      M <- sweep(M, 2, target / colSums(M), "*")
     }
-
-    total_matches_processed <- total_matches_processed + 1
+    working_probs[idx, ] <- M / rowSums(M)
   }
 
   if (verbose) {
-    cat(sprintf("Processed all %d matches in %d total iterations\n",
-                length(unique_matches), global_iter))
+    cat(sprintf("Processed all %d matches (%d Sinkhorn iterations each)\n",
+                length(unique_matches), ipf_iters))
   }
 
-  # Set convergence based on whether we processed all matches
   convergence_data$converged <- TRUE
-  convergence_data$iterations <- global_iter
+  convergence_data$iterations <- ipf_iters
 
   # Final check for negative probabilities
   neg_count <- sum(working_probs < 0, na.rm = TRUE)
