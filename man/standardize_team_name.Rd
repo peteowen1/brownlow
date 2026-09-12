@@ -2,7 +2,7 @@
 % Please edit documentation in R/enhanced_datathon_data.R
 \name{standardize_team_name}
 \alias{standardize_team_name}
-\title{Enhanced Datathon Data with Umpire and Weather Information}
+\title{Standardize Team Names}
 \usage{
 standardize_team_name(team_name)
 }
@@ -13,11 +13,5 @@ standardize_team_name(team_name)
 Character. Standardized team name
 }
 \description{
-Functions to enhance the base datathon dataset with supplementary data from
-AFLTables (umpire information) and fryzigg (weather data) to improve
-Brownlow Medal prediction models.
-Standardize Team Names
-}
-\details{
 Standardizes AFL team names to consistent format for data merging
 }

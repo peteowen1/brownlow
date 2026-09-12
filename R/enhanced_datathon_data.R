@@ -1,8 +1,8 @@
-#' Enhanced Datathon Data with Umpire and Weather Information
-#'
-#' Functions to enhance the base datathon dataset with supplementary data from
-#' AFLTables (umpire information) and fryzigg (weather data) to improve
-#' Brownlow Medal prediction models.
+# Enhanced Datathon Data with Umpire and Weather Information
+#
+# Functions to enhance the base datathon dataset with supplementary data from
+# AFLTables (umpire information) and fryzigg (weather data) to improve
+# Brownlow Medal prediction models.
 
 #' Standardize Team Names
 #'

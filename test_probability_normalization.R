@@ -9,21 +9,26 @@ cat("=== TESTING PROBABILITY NORMALIZATION FUNCTIONS ===\n")
 # Test 1: Basic functionality with well-behaved data ####
 cat("\n=== TEST 1: Basic Functionality ===\n")
 
-# Create a simple test case with 2 matches, 6 players total
+# Create a simple test case with 2 matches, 8 players total. Real AFL matches
+# have ~44 players; normalize_probability_matrix() requires at least 4 (the
+# target column sums are n-3, 1, 1, 1, which needs n >= 4 to stay
+# non-negative -- same guard normalize_votes_ipf() already enforces).
 set.seed(42)
 test_prob_matrix <- matrix(c(
-  # Match 1 - 3 players
+  # Match 1 - 4 players
   0.6, 0.3, 0.08, 0.02,  # Player 1: mostly 0 votes
   0.2, 0.4, 0.3, 0.1,   # Player 2: spread across votes
   0.1, 0.2, 0.4, 0.3,   # Player 3: higher vote probabilities
+  0.8, 0.1, 0.07, 0.03, # Player 3b: mostly 0 votes
 
-  # Match 2 - 3 players
+  # Match 2 - 4 players
   0.7, 0.2, 0.08, 0.02, # Player 4: mostly 0 votes
   0.3, 0.3, 0.25, 0.15, # Player 5: balanced
-  0.05, 0.15, 0.3, 0.5  # Player 6: high vote probability
-), nrow = 6, byrow = TRUE)
+  0.05, 0.15, 0.3, 0.5,  # Player 6: high vote probability
+  0.75, 0.15, 0.07, 0.03 # Player 6b: mostly 0 votes
+), nrow = 8, byrow = TRUE)
 
-test_match_ids <- c("M1", "M1", "M1", "M2", "M2", "M2")
+test_match_ids <- c("M1", "M1", "M1", "M1", "M2", "M2", "M2", "M2")
 
 cat("Input probability matrix:\n")
 print(round(test_prob_matrix, 3))
@@ -75,12 +80,13 @@ cat("\n--- Test 2a: All zero non-zero probabilities ---\n")
 zero_probs <- matrix(c(
   1, 0, 0, 0,
   1, 0, 0, 0,
+  1, 0, 0, 0,
   1, 0, 0, 0
-), nrow = 3, byrow = TRUE)
+), nrow = 4, byrow = TRUE)
 
 result2a <- normalize_probability_matrix(
   prob_matrix = zero_probs,
-  match_ids = c("M1", "M1", "M1"),
+  match_ids = c("M1", "M1", "M1", "M1"),
   verbose = TRUE
 )
 
@@ -89,12 +95,13 @@ cat("\n--- Test 2b: Players exceeding 3-vote limit ---\n")
 extreme_probs <- matrix(c(
   0.05, 0.05, 0.1, 0.8,  # Player with very high P(3) - should be constrained
   0.1, 0.05, 0.05, 0.8,  # Another high-vote player
-  0.85, 0.1, 0.04, 0.01  # Low-vote player
-), nrow = 3, byrow = TRUE)
+  0.85, 0.1, 0.04, 0.01, # Low-vote player
+  0.9, 0.05, 0.03, 0.02  # Another low-vote player
+), nrow = 4, byrow = TRUE)
 
 result2b <- normalize_probability_matrix(
   prob_matrix = extreme_probs,
-  match_ids = c("M1", "M1", "M1"),
+  match_ids = c("M1", "M1", "M1", "M1"),
   verbose = TRUE
 )
 
@@ -103,12 +110,13 @@ cat("\n--- Test 2c: Non-normalized input ---\n")
 unnormalized_probs <- matrix(c(
   2, 1, 0.5, 0.1,   # Row sum = 3.6
   0.5, 0.8, 0.3, 0.2, # Row sum = 1.8
-  1.2, 0.4, 0.2, 0.1  # Row sum = 1.9
-), nrow = 3, byrow = TRUE)
+  1.2, 0.4, 0.2, 0.1, # Row sum = 1.9
+  0.8, 0.3, 0.1, 0.1  # Row sum = 1.3
+), nrow = 4, byrow = TRUE)
 
 result2c <- normalize_probability_matrix(
   prob_matrix = unnormalized_probs,
-  match_ids = c("M1", "M1", "M1"),
+  match_ids = c("M1", "M1", "M1", "M1"),
   verbose = TRUE
 )
 
