@@ -5,7 +5,7 @@
 # Setup ####
 
 ## Configuration parameters ----
-target_season <- 2025         # Season to generate predictions for
+target_season <- 2026         # Season to generate predictions for
 prediction_type <- ifelse(target_season < 2025, 'historical', "future")    # "future" for upcoming seasons, "historical" for past seasons
 
 ## Load required libraries ----
@@ -486,7 +486,7 @@ summary_report <- list(
   prediction_date = Sys.Date(),
   total_players = nrow(player_vote_expectations),
   total_predictions = nrow(season_predictions),
-  ensemble_weights = ensemble_weights,
+  ensemble_weights = trained_models_raw$ensemble$weights,
   top_10_players = head(player_vote_expectations, 10),
   medal_favorite = player_vote_expectations$player_name[1],
   predicted_winner_votes = player_vote_expectations$ensemble_total[1],
