@@ -11,7 +11,7 @@ set.seed(42)
 theme_set(theme_minimal())
 
 # Configuration
-target_season <- 2025
+target_season <- 2026
 n_simulations <- 2000
 models_to_run <- c("ensemble")  # Options: "xgb", "gam", "ensemble"
 n_cores <- round(detectCores() / 2)

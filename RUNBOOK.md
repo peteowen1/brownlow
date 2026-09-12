@@ -72,6 +72,18 @@ allowed and the last file before the deadline is the one scored.
 4. Set `TARGET_SEASON <- 2026` at the top of `09_submission_predictions.R`.
    The script `stop()`s with a clear message if the form is missing, so a
    forgotten flip fails loudly rather than silently submitting 2025.
+5. **Set `holdout_seasons = c(<current year>)` at the `prepare_modeling_data()`
+   call in `02_base_feature_engineering.R`**, alongside the existing explicit
+   `test_seasons`. Its default is a stale `c(2025)` in `R/model_utils.R` and
+   nothing enforces overriding it. Missing this does NOT fail loudly: a
+   missing `brownlow_votes` gets replaced with 0 during cleaning
+   (`R/datathon_data.R`), so the current season's placeholder zeros silently
+   pass the NA-filter and land in `$train` as fabricated "0 votes" labels for
+   every player in every match of the season being predicted -- 9,522 rows
+   (12.2% of training) in the 2026-09-12 incident, discovered only because
+   the model's own predictions looked suspiciously suppressed. Verify by
+   checking `readRDS("data/processed/modeling_data.rds")$holdout$season`
+   equals the current year, not the previous one, after running `02`.
 
 ---
 
