@@ -89,10 +89,21 @@ modeling_data <- correlation_results$cleaned_data %>%
   dplyr::filter(!is.na(brownlow_votes))
 
 # Create train/test split
+#
+# holdout_seasons must be the CURRENT datathon season (2026), not left to
+# prepare_modeling_data()'s stale c(2025) default. R/datathon_data.R replaces
+# a missing brownlow_votes with 0 -- correct for a completed season (no
+# recorded vote really does mean zero) but wrong for the current one, where a
+# blank vote means "not decided yet". Update this alongside test_seasons and
+# TARGET_SEASON in 07/08/09 every year: found 2026-09-12 that last year's
+# c(2025) default silently let 9,522 rows (12.2% of the training set) of
+# fabricated "0 votes for 2026" leak into training, because nobody updates
+# this specific hardcoded default when the year rolls over.
 prepared_data <- prepare_modeling_data(
   features = modeling_data,
   target_col = "brownlow_votes",
-  test_seasons = c(2023, 2024)
+  test_seasons = c(2023, 2024),
+  holdout_seasons = c(2026)
 )
 
 cat(sprintf(" train: %d, test: %d\n",

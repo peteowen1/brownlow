@@ -151,24 +151,41 @@ print(as.data.frame(sel_tbl), row.names = FALSE, digits = 6)
 w_star <- sel_res$weight
 cat(sprintf("\n  walk-forward-selected w_xgb = %.2f\n", w_star))
 
-# ---- apply once to 2025 -------------------------------------------------------
+# ---- apply once to the most recent season with KNOWN actuals ------------------
+# enhanced$holdout is now whatever the pipeline's holdout_seasons config says
+# (2026 as of this year) -- a season with no real votes at all, since that is
+# the entire point of the datathon. Scoring against it is impossible, not a
+# bug: attach_holdout_actuals() would (correctly) fail to join any real votes.
+# The most recent season with a real actuals file is hardcoded here as
+# KNOWN_ACTUALS_SEASON, separate from holdout_seasons -- update it each year
+# once that year's real results are published, same as test_seasons/
+# TARGET_SEASON elsewhere. It is no longer a true holdout once the season
+# rolls over and 02 folds it into $train for the production fit (correct:
+# the shipped model should train on every real season available), so this is
+# an IN-SAMPLE check from here on, not the leakage-free number it was while
+# that season was still excluded from training. Kept anyway because it is
+# still useful as a sanity check that the blend behaves sensibly on real
+# outcomes, just not as the headline generalisation estimate.
+KNOWN_ACTUALS_SEASON <- 2025
 xgbp <- readRDS("results/xgboost_probabilities.rds")
 gamp <- readRDS("results/gam_probabilities.rds")
-hold <- attach_holdout_actuals(enhanced$holdout) %>%
+known_season_data <- enhanced$train %>% dplyr::filter(season == KNOWN_ACTUALS_SEASON)
+hold <- attach_holdout_actuals(known_season_data) %>%
   dplyr::select(player_name, team, date, match_id, Actual)
 
 h <- xgbp %>%
   dplyr::inner_join(gamp %>% dplyr::select(player_name, team, date, match_id,
                                            dplyr::starts_with("gam_prob_")),
                     by = c("player_name","team","date","match_id")) %>%
-  dplyr::filter(season == 2025) %>%
+  dplyr::filter(season == KNOWN_ACTUALS_SEASON) %>%
   dplyr::inner_join(hold, by = c("player_name","team","date","match_id"))
-stopifnot(nrow(h) == nrow(enhanced$holdout))
+stopifnot(nrow(h) == nrow(known_season_data))
 
 Xh <- as.matrix(h[, paste0("xgboost_prob_", 0:3)])
 Gh <- as.matrix(h[, paste0("gam_prob_", 0:3)])
 
-cat("\n=== 2025 holdout RMSE ===\n")
+cat(sprintf("\n=== %d RMSE (IN-SAMPLE -- %d is now part of training data) ===\n",
+            KNOWN_ACTUALS_SEASON, KNOWN_ACTUALS_SEASON))
 for (lbl_w in list(c("walk-forward selected", w_star), c("ships today", 0.858),
                    c("in-sample selected", 1.00))) {
   w <- as.numeric(lbl_w[2])
