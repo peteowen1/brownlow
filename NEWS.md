@@ -3,6 +3,42 @@
 This file starts at 0.2.0. Earlier versions are documented in the commit
 history and in `POSTMORTEM-2025.md`.
 
+# brownlow 0.2.6
+
+**A training data leak affected every 2026 prediction shipped in 0.2.5.**
+`prepare_modeling_data()`'s `holdout_seasons` default (`R/model_utils.R`) is
+a hardcoded `c(2025)`, never overridden by its one real caller. Combined
+with a missing `brownlow_votes` being replaced with `0` during cleaning --
+correct for a completed season, wrong for the current one -- 2026's entire
+season (9,522 of 77,766 training rows, 12.2%) sat in `$train` with a
+fabricated "0 votes" label for every player in every match, for the exact
+season the model exists to predict.
+
+Confirmed against the regenerated data directly: fixing this moved Nick
+Daicos's predicted 2026 votes 29.75 -> 42.17 and win probability 73.6% ->
+94.8% -- the systematic zero-vote drag from 12% fabricated rows, gone.
+
+* `02_base_feature_engineering.R`: pass `holdout_seasons = c(2026)`
+  explicitly, matching the existing explicit `test_seasons`. Update this
+  every year alongside `test_seasons` and `TARGET_SEASON` -- see the new
+  RUNBOOK.md rollover checklist item.
+* `analysis/ensemble_weight_walkforward.R`: the "score against real holdout
+  actuals" diagnostic assumed holdout == the season with known votes. Now
+  explicitly checks the most recent season with real actuals (2025),
+  relabeled IN-SAMPLE since 2025 is no longer excluded from training.
+* `R/simulation_utils.R`: `load_simulation_data()` never branched on the
+  holdout split at all, only train/test/val -- fixed the resulting
+  misrouting for a genuinely future season, with a guard against a stale
+  `predictions/{season}/` directory shadowing a resolved season's real
+  votes.
+* `07_season_predictions.R`: fixed an undefined-variable bug (dead code,
+  never previously exercised for a real future season).
+* `RUNBOOK.md`: added `holdout_seasons` to the year-rollover checklist.
+
+Two rounds of independent Sonnet review; the second verified the fix's
+mechanism, scope, and exact before/after numbers directly against the
+regenerated data files, not just the code.
+
 # brownlow 0.2.5
 
 2025 holdout RMSE 0.35530 -> 0.35604 (walk-forward-selected blend). Within
