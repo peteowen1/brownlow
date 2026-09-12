@@ -37,6 +37,48 @@ as_prob_matrix <- function(pred, n_obs) {
   pred
 }
 
+#' Canonicalise a Player Name for Cross-Vintage Joins
+#'
+#' The datathon feed is not a stable identifier source across refreshes: the
+#' 2026-09-11 refresh renumbered `player_id` for essentially every player (not
+#' just the ones below -- e.g. Jaeger O'Meara went 12149 -> 12141), stripped
+#' apostrophes/periods from surnames (O'Meara -> OMeara, D'Ambrosio ->
+#' DAmbrosio), and for 15 players changed a formal first name to the
+#' preferred one or dropped a suffix (Harrison Petty -> Harry Petty, Robert
+#' Hansen Jr -> Robert Hansen). None of that is a data error -- both vintages
+#' are self-consistent -- but it means neither `player_id` nor the raw name
+#' string bridges an old cached artifact (like the static comparison CSV
+#' below) to a freshly-pulled feed. Team + date + this canonical name does.
+#'
+#' The alias list was derived by matching each of the 353 names that failed
+#' to join after the 2026-09-11 refresh against the same (team, date)'s
+#' leftover new-vintage name, disambiguated by last name.
+#'
+#' @param full_name Character vector of "First Last" names
+#' @return Lowercase, letters-only name with known aliases resolved
+#' @export
+canonicalize_player_name <- function(full_name) {
+  aliases <- c(
+    "mitchellhinge"     = "mitchhinge",
+    "matthewcarroll"    = "mattcarroll",
+    "williamhayes"      = "willhayes",
+    "archermay"         = "archiemay",
+    "harrisonjones"     = "harryjones",
+    "thomasedwards"     = "tomedwards",
+    "joshuadraper"      = "joshdraper",
+    "leonardolombard"   = "leolombard",
+    "callummbrown"      = "callumbrown",
+    "nicholasmadden"    = "nickmadden",
+    "harrisonpetty"     = "harrypetty",
+    "roberthansenjr"    = "roberthansen",
+    "thomassims"        = "tomsims",
+    "alixzandertauru"   = "alixtauru",
+    "baileyjwilliams"   = "baileywilliams"
+  )
+  key <- tolower(gsub("[^A-Za-z]", "", full_name))
+  unname(ifelse(key %in% names(aliases), aliases[key], key))
+}
+
 #' Attach Known Actual Votes to a Holdout Season
 #'
 #' The datathon dataset ships the prediction season with all votes set to zero.
@@ -45,6 +87,11 @@ as_prob_matrix <- function(pred, n_obs) {
 #' Do not join on round: the 2025 Gold Coast v Essendon fixture was postponed by
 #' Cyclone Alfred and replayed, and the two sources label it differently (Round 0
 #' vs Round 24), which produces 41 duplicate keys.
+#'
+#' Player names are canonicalised via `canonicalize_player_name()` (see there)
+#' rather than compared raw, because the source that built `results_file` and
+#' the feed `holdout` is built from can be different vintages of the same
+#' datathon dataset.
 #'
 #' @param holdout Holdout data frame with `date`, `team`, `player_name`
 #' @param results_file CSV of predictions vs actuals containing `match_date`,
@@ -60,7 +107,7 @@ attach_holdout_actuals <- function(holdout,
     dplyr::transmute(
       date_j   = as.Date(match_date, format = "%d/%m/%Y"),
       team_j   = player_team_std,
-      player_j = full_player_name,
+      player_j = canonicalize_player_name(full_player_name),
       Actual
     )
 
@@ -69,7 +116,7 @@ attach_holdout_actuals <- function(holdout,
     dplyr::mutate(
       date_j   = as.Date(date),
       team_j   = standardize_team_name(team),
-      player_j = player_name
+      player_j = canonicalize_player_name(player_name)
     ) %>%
     dplyr::left_join(actuals, by = c("date_j", "team_j", "player_j"))
 
