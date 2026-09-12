@@ -9,7 +9,9 @@ cat("=== PROBABILITY NORMALIZATION DEMO ===\n")
 # Example 1: Basic normalization with analytical solution ####
 cat("\n=== EXAMPLE 1: Basic Probability Normalization ===\n")
 
-# Create example probability matrix (unnormalized)
+# Create example probability matrix (unnormalized). Real AFL matches have
+# ~44 players; normalize_probability_matrix() requires at least 4 per match
+# (targets are n-3, 1, 1, 1, which needs n >= 4 to stay non-negative).
 prob_matrix <- matrix(c(
   # Player 1: mostly gets 0 votes
   0.8, 0.15, 0.04, 0.01,
@@ -17,15 +19,20 @@ prob_matrix <- matrix(c(
   0.4, 0.3, 0.2, 0.1,
   # Player 3: high chance of votes
   0.2, 0.2, 0.3, 0.3,
+  # Player 3b: mostly gets 0 votes
+  0.75, 0.15, 0.07, 0.03,
   # Player 4: different match
   0.9, 0.08, 0.015, 0.005,
   # Player 5:
   0.5, 0.25, 0.15, 0.1,
   # Player 6:
-  0.1, 0.3, 0.4, 0.2
-), nrow = 6, byrow = TRUE)
+  0.1, 0.3, 0.4, 0.2,
+  # Player 6b: mostly gets 0 votes
+  0.85, 0.08, 0.05, 0.02
+), nrow = 8, byrow = TRUE)
 
-match_ids <- c("Match_1", "Match_1", "Match_1", "Match_2", "Match_2", "Match_2")
+match_ids <- c("Match_1", "Match_1", "Match_1", "Match_1",
+              "Match_2", "Match_2", "Match_2", "Match_2")
 
 cat("Original probability matrix:\n")
 print(round(prob_matrix, 3))
@@ -39,7 +46,7 @@ result <- normalize_probability_matrix(
 
 cat("\nResulting expected votes per player:\n")
 expected_votes_by_match <- data.frame(
-  Player = paste0("Player_", 1:6),
+  Player = paste0("Player_", seq_along(match_ids)),
   Match = match_ids,
   Expected_Votes = round(result$expected_votes, 3)
 )
@@ -101,8 +108,8 @@ cat("\n=== EXAMPLE 3: Method Comparison ===\n")
 
 # Compare different approaches
 set.seed(42)
-test_matrix <- matrix(runif(12, 0, 1), nrow = 3, ncol = 4)
-test_matches <- c("M1", "M1", "M1")
+test_matrix <- matrix(runif(16, 0, 1), nrow = 4, ncol = 4)
+test_matches <- c("M1", "M1", "M1", "M1")
 
 cat("Original matrix (unnormalized):\n")
 print(round(test_matrix, 3))

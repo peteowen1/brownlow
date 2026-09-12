@@ -89,7 +89,11 @@ prepare_modeling_data <- function(features,
 #'
 #' @param features DataFrame with all features
 #' @param target_col Character. Name of target column (default: "brownlow_votes")
-#' @param holdout_seasons Vector. seasons to exclude completely as holdout (default: c(2025))
+#' @param holdout_seasons Vector. seasons to exclude completely as holdout.
+#'   Update this every year the way `02_base_feature_engineering.R` updates
+#'   its own explicit override to `prepare_modeling_data()` -- an unfixed
+#'   stale year here silently trains on the current season's placeholder
+#'   zero-vote rows (see NEWS.md 0.2.6).
 #' @param remove_zero_votes Logical. Remove observations with 0 votes from training (default: FALSE)
 #'
 #' @return List containing full training data and metadata
@@ -97,7 +101,7 @@ prepare_modeling_data <- function(features,
 prepare_full_training_data <- function(features,
                                       target_col = "brownlow_votes",
                                       test_seasons = NULL,
-                                      holdout_seasons = c(2025),
+                                      holdout_seasons = c(2026),
                                       remove_zero_votes = FALSE) {
   # test_seasons was referenced in the body but never declared as a parameter,
   # so this either errored or silently picked up a global of the same name.

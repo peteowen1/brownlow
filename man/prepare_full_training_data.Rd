@@ -8,7 +8,7 @@ prepare_full_training_data(
   features,
   target_col = "brownlow_votes",
   test_seasons = NULL,
-  holdout_seasons = c(2025),
+  holdout_seasons = c(2026),
   remove_zero_votes = FALSE
 )
 }
@@ -17,7 +17,11 @@ prepare_full_training_data(
 
 \item{target_col}{Character. Name of target column (default: "brownlow_votes")}
 
-\item{holdout_seasons}{Vector. seasons to exclude completely as holdout (default: c(2025))}
+\item{holdout_seasons}{Vector. seasons to exclude completely as holdout.
+Update this every year the way `02_base_feature_engineering.R` updates
+its own explicit override to `prepare_modeling_data()` -- an unfixed
+stale year here silently trains on the current season's placeholder
+zero-vote rows (see NEWS.md 0.2.6).}
 
 \item{remove_zero_votes}{Logical. Remove observations with 0 votes from training (default: FALSE)}
 }

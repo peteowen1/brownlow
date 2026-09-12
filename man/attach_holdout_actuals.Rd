@@ -29,4 +29,9 @@ This joins the published results back on, keyed on date rather than round.
 Do not join on round: the 2025 Gold Coast v Essendon fixture was postponed by
 Cyclone Alfred and replayed, and the two sources label it differently (Round 0
 vs Round 24), which produces 41 duplicate keys.
+
+Player names are canonicalised via `canonicalize_player_name()` (see there)
+rather than compared raw, because the source that built `results_file` and
+the feed `holdout` is built from can be different vintages of the same
+datathon dataset.
 }

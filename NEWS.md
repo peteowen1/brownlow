@@ -3,6 +3,38 @@
 This file starts at 0.2.0. Earlier versions are documented in the commit
 history and in `POSTMORTEM-2025.md`.
 
+# brownlow 0.2.7
+
+`normalize_probability_matrix()` -- used on the model's critical path in
+03, 05, 06 and 08 -- replaced a per-player, per-column scalar R loop (up to
+1000 power-transform iterations per match) with the same vectorised
+Sinkhorn/IPF row/column balancing `normalize_votes_ipf()` already used for
+the final vote-allocation step. Measured 183-190 seconds -- over 25% of a
+pipeline stage's runtime -- down to ~24 seconds, and the old algorithm
+never fully converged (82 match-level violations logged before this
+change; the new one routinely hits exact 0.00e+00 error). Same function
+name and return contract, so all 6 call sites got the speedup with no
+edits needed there.
+
+Verified this is a speed fix, not a quality change: full rebuild dropped
+stage 05 13.7 -> 6.7 min and stage 03 11.7 -> 5.5 min; 2025 in-sample RMSE
+moved 0.32057 -> 0.32002 (within noise); the submission leaderboard is
+stable (Nick Daicos 42.17 -> 42.04 predicted votes).
+
+Also: `R/enhanced_datathon_data.R` had two definitions of
+`enhance_datathon_data()` -- the first was dead and broken (called
+`load_datathon_data()` with an argument that function doesn't accept),
+deleted. `prepare_full_training_data()`'s stale `holdout_seasons = c(2025)`
+default (unused anywhere today) updated to `c(2026)`. Fixed two demo/test
+scripts whose 3-player synthetic fixtures hit the (correctly ported)
+`n >= 4` match-size guard -- real AFL matches have ~44 players, so the
+pipeline itself was never affected.
+
+Two rounds of independent Sonnet review; the first found no correctness
+issue on the datathon-relevant path but caught a doc-generation regression
+and the two demo/test script breaks, both fixed in a follow-up commit and
+verified by direct script execution.
+
 # brownlow 0.2.6
 
 **A training data leak affected every 2026 prediction shipped in 0.2.5.**

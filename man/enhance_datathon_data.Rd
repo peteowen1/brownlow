@@ -2,7 +2,7 @@
 % Please edit documentation in R/enhanced_datathon_data.R
 \name{enhance_datathon_data}
 \alias{enhance_datathon_data}
-\title{Enhanced Datathon Data with Umpire and Weather Information}
+\title{Enhanced Datathon Data Loader}
 \usage{
 enhance_datathon_data(
   file_path = "data/brownlow_datathon_dataset.csv",
@@ -28,19 +28,19 @@ enhance_datathon_data(
 
 \item{progress}{Logical. Show progress messages (default: TRUE)}
 
-\item{fallback_on_error}{Logical. Continue on errors (default: TRUE)}
+\item{fallback_on_error}{Currently unused: the function always continues
+without umpire/weather data on a fetch error regardless of this value.
+Kept for call-site compatibility rather than removed.}
 
 \item{force_reload}{Logical. Force reload of cached data (default: FALSE)}
 }
 \value{
-List containing enhanced datasets: stats, votes, metadata
+List with `stats` (enhanced player-match rows), `votes` (rows with
+  `brownlow_votes > 0`), and `metadata`
 }
 \description{
-Functions to enhance the base datathon dataset with supplementary data from
-AFLTables (umpire information) and fryzigg (weather data) to improve
-Brownlow Medal prediction models.
-Enhanced Datathon Data Loader
-}
-\details{
-Loads the datathon dataset and enhances it with umpire and weather data
+Loads the datathon dataset, cleans and standardises it (snake_case names,
+canonical team names via `standardize_team_name()`, consistency-checked via
+`assert_team_names_consistent()`), and optionally enriches it with umpire
+data from AFLTables and weather data from Fryzigg.
 }

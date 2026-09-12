@@ -22,13 +22,20 @@ normalize_probability_matrix(
 
 \item{max_votes_per_match}{Maximum votes per match (default: 6)}
 
-\item{tolerance}{Numerical tolerance for constraint validation (default: 1e-10)}
+\item{tolerance}{Numerical tolerance for constraint validation, passed to
+`validate_probability_constraints()` (default: 1e-10)}
 
-\item{max_iterations}{Maximum iterations for convergence (default: 50)}
+\item{max_iterations}{Unused since the 2026-09-12 rewrite (200 fixed
+Sinkhorn iterations per match, matching `normalize_votes_ipf()`'s
+default, converges tighter than the old algorithm did in up to 1000).
+Kept for call-site compatibility rather than removed.}
 
-\item{power_alpha}{Sensitivity factor for adaptive power normalization (default: 0.3)}
+\item{power_alpha}{Unused since the 2026-09-12 rewrite (was the old
+power-transform algorithm's damping factor). Kept for call-site
+compatibility rather than removed.}
 
-\item{high_confidence_threshold}{Skip normalization for predictions above this threshold (default: 0.95)}
+\item{high_confidence_threshold}{Unused -- was already dead in the
+algorithm this replaced.}
 
 \item{verbose}{Logical whether to show detailed validation output (default: FALSE)}
 }
@@ -36,7 +43,11 @@ normalize_probability_matrix(
 List with normalized_probabilities (matrix) and diagnostics (list)
 }
 \description{
-Advanced probability normalization ensuring both individual player probabilities sum to 1
-AND match-level vote type probabilities sum to 1. Uses iterative Sinkhorn algorithm with
-power-based normalization to preserve high-confidence predictions.
+Ensures both individual player probabilities sum to 1 AND match-level vote
+type probabilities sum to their AFL voting targets (n-3, 1, 1, 1), via
+vectorised Sinkhorn/IPF balancing -- the same row/column matrix operations
+`normalize_votes_ipf()` (R/evaluation_harness.R) uses for the final
+vote-allocation step this function feeds. Replaced a per-player,
+per-match scalar power-transform loop on 2026-09-12 (183-190 seconds,
+>25% of a full pipeline stage, on the 106k-row/2361-match history).
 }

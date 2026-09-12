@@ -1,79 +1,8 @@
-#' Enhanced Datathon Data with Umpire and Weather Information
-#'
-#' Functions to enhance the base datathon dataset with supplementary data from
-#' AFLTables (umpire information) and fryzigg (weather data) to improve
-#' Brownlow Medal prediction models.
-
-#' Enhanced Datathon Data Loader
-#'
-#' Loads the datathon dataset and enhances it with umpire and weather data
-#'
-#' @param file_path Character. Path to datathon CSV file
-#' @param seasons Integer vector. Seasons to include (default: all available)
-#' @param add_umpires Logical. Add umpire data from afltables (default: TRUE)
-#' @param add_weather Logical. Add weather data from fryzigg (default: TRUE)
-#' @param cache_dir Character. Directory for caching supplementary data
-#' @param progress Logical. Show progress messages (default: TRUE)
-#' @param fallback_on_error Logical. Continue on errors (default: TRUE)
-#' @param force_reload Logical. Force reload of cached data (default: FALSE)
-#'
-#' @return List containing enhanced datasets: stats, votes, metadata
-#' @export
-enhance_datathon_data <- function(file_path = "data/brownlow_datathon_dataset.csv",
-                                  seasons = NULL,
-                                  add_umpires = TRUE,
-                                  add_weather = TRUE,
-                                  cache_dir = "data/cache",
-                                  progress = TRUE,
-                                  fallback_on_error = TRUE,
-                                  force_reload = FALSE) {
-
-  if (progress) cat("Loading datathon data...\n")
-
-  # Load base datathon data
-  base_data <- load_datathon_data(file_path = file_path, seasons = seasons, progress = progress)
-
-  # Add umpires if requested
-  if (add_umpires) {
-    if (progress) cat("Adding umpire data...")
-    tryCatch({
-      umpire_data <- fetch_umpire_data(seasons = base_data$seasons, cache_dir = cache_dir, force_reload = force_reload)
-      enhanced_stats <- merge_umpire_data(base_data$stats, umpire_data, progress = FALSE)
-      base_data$stats <- enhanced_stats
-      if (progress) cat(" ✓\n")
-    }, error = function(e) {
-      if (fallback_on_error) {
-        if (progress) cat(sprintf(" ⚠️ Failed: %s\n", e$message))
-      } else {
-        stop(sprintf("Umpire data loading failed: %s", e$message))
-      }
-    })
-  }
-
-  # Add weather if requested
-  if (add_weather) {
-    if (progress) cat("Adding weather data...")
-    tryCatch({
-      weather_data <- fetch_weather_data(seasons = base_data$seasons, cache_dir = cache_dir, force_reload = force_reload)
-      enhanced_stats <- merge_weather_data(base_data$stats, weather_data, progress = FALSE)
-      base_data$stats <- enhanced_stats
-      if (progress) cat(" ✓\n")
-    }, error = function(e) {
-      if (fallback_on_error) {
-        if (progress) cat(sprintf(" ⚠️ Failed: %s\n", e$message))
-      } else {
-        stop(sprintf("Weather data loading failed: %s", e$message))
-      }
-    })
-  }
-
-  if (progress) {
-    cat(sprintf("✅ Enhanced dataset loaded: %d observations, %d seasons\n",
-                nrow(base_data$stats), length(base_data$seasons)))
-  }
-
-  return(base_data)
-}
+# Enhanced Datathon Data with Umpire and Weather Information
+#
+# Functions to enhance the base datathon dataset with supplementary data from
+# AFLTables (umpire information) and fryzigg (weather data) to improve
+# Brownlow Medal prediction models.
 
 #' Standardize Team Names
 #'
@@ -158,6 +87,27 @@ assert_team_names_consistent <- function(data, team_col = "team") {
   invisible(data)
 }
 
+#' Enhanced Datathon Data Loader
+#'
+#' Loads the datathon dataset, cleans and standardises it (snake_case names,
+#' canonical team names via `standardize_team_name()`, consistency-checked via
+#' `assert_team_names_consistent()`), and optionally enriches it with umpire
+#' data from AFLTables and weather data from Fryzigg.
+#'
+#' @param file_path Character. Path to datathon CSV file
+#' @param seasons Integer vector. Seasons to include (default: all available)
+#' @param add_umpires Logical. Add umpire data from afltables (default: TRUE)
+#' @param add_weather Logical. Add weather data from fryzigg (default: TRUE)
+#' @param cache_dir Character. Directory for caching supplementary data
+#' @param progress Logical. Show progress messages (default: TRUE)
+#' @param fallback_on_error Currently unused: the function always continues
+#'   without umpire/weather data on a fetch error regardless of this value.
+#'   Kept for call-site compatibility rather than removed.
+#' @param force_reload Logical. Force reload of cached data (default: FALSE)
+#'
+#' @return List with `stats` (enhanced player-match rows), `votes` (rows with
+#'   `brownlow_votes > 0`), and `metadata`
+#' @export
 enhance_datathon_data <- function(file_path = "data/brownlow_datathon_dataset.csv",
                                   seasons = NULL,
                                   add_umpires = TRUE,
