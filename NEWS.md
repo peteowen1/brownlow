@@ -3,6 +3,36 @@
 This file starts at 0.2.0. Earlier versions are documented in the commit
 history and in `POSTMORTEM-2025.md`.
 
+# brownlow 0.2.5
+
+2025 holdout RMSE 0.35530 -> 0.35604 (walk-forward-selected blend). Within
+one measured seed-noise sd (0.00060, POSTMORTEM Sec 5p) of the prior figure,
+so not distinguishable from run-to-run noise -- not investigated further.
+
+The 2026 Brownlow Datathon's submission form and the organiser's raw data
+feed both changed schema this year, breaking the pipeline used to produce a
+submission. This release fixes it and ships a working 2026 submission.
+
+* `09_submission_predictions.R`: the 2026 form dropped `match_id`/`match_date`
+  (only `player_id` remains). Recovers `match_date` via `(season,
+  match_round, player_id)` against the raw feed, then rebuilds `match_id` as
+  the pipeline's own synthetic `date_home_away` key (matching
+  `R/performance_features.R`) rather than the raw feed's numeric one --
+  verified empirically (exact 207/207 match) before shipping.
+* Several `filter()`/`select()` calls fixed after discovering `stats::filter()`
+  silently masks `dplyr::filter()` once `devtools::load_all()` attaches
+  `mgcv`/`nlme` -- was producing "object not found" instead of filtering.
+* `R/evaluation_harness.R`: `attach_holdout_actuals()` now canonicalises
+  player names before joining, because the organiser's refresh renumbered
+  `player_id` for every player and changed 15 players' names (e.g.
+  `Robert Hansen Jr` -> `Robert Hansen`).
+* `05_xgboost_model.R`: removed a redundant 7th XGBoost fit that existed
+  only to source `xgb.importance()` -- reuses one of the 5 already-fitted
+  seed-averaged models instead (~2 min/run saved, verified
+  behaviour-preserving).
+* Adds `wait_and_run.ps1`, a memory-gated wrapper for running pipeline steps
+  one at a time when other sessions on this machine are contending for RAM.
+
 # brownlow 0.2.4
 
 Housekeeping only; no change to the model or its output (2025 holdout RMSE
@@ -45,7 +75,7 @@ stays 0.35530).
 * `assert_match_relative_clean()` verifies rank orientation on every column
   with a `_rank` counterpart. An inverted rank would reverse a feature's
   meaning while still producing plausible values in [0, 1].
-* New `add_efficiency_features()` — impact per possession. **A documented null,
+* New `add_efficiency_features()` ï¿½ impact per possession. **A documented null,
   deliberately not wired into the pipeline.** It separates its target
   population cleanly (players polling on low disposals show 5.896 impact per
   disposal against 4.077) but cannot move the score, because that population is
