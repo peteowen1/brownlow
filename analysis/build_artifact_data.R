@@ -8,7 +8,7 @@ suppressMessages({ library(data.table); library(jsonlite) })
 ev <- fread("results/markets/expected_votes_by_round_2026.csv")
 su <- fread("results/markets/player_summary_2026.csv")
 k  <- fread("results/markets/sportsbet_2026_kelly.csv")[edge > 0, .(market, sel, odds, p, edge, kelly)]
-mu <- fread("results/markets/ou_multis_priced.csv")[edge > 0][1:40, .(market = "OU multi",
+mu <- head(fread("results/markets/ou_multis_priced.csv")[edge > 0], 40)[, .(market = "OU multi",   # head(): DT[1:40] pads with NA rows when shorter
         sel = paste0(leg1, " + ", leg2, " (lift ", lift, ")"), odds = round(odds, 2), p = p_joint, edge, kelly)]
 rounds <- sort(unique(ev$round))
 w   <- dcast(ev, player_name + team ~ round, value.var = "xv")

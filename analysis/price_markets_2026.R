@@ -188,7 +188,8 @@ for (m in unique(L[grepl("^Round \\d+$|^Opening Round$", event), market_id])) { 
   mp <- ep[match_id == mid]
   listed <- L$selection[rows][L$selection[rows] != "Any other player"]
   p3 <- sapply(listed, function(s) { i <- pid(s); if (is.na(i)) NA_real_ else { v <- mp[player_name == pname[i], ensemble_prob_3]; if (length(v) == 1) v else NA_real_ } })
-  L$p[rows] <- ifelse(L$selection[rows] == "Any other player", 1 - sum(p3, na.rm = TRUE), p3[L$selection[rows]])
+  # sum() without na.rm: an unresolved listed player leaves "Any other player" unpriced too, rather than silently inflating it
+  L$p[rows] <- ifelse(L$selection[rows] == "Any other player", 1 - sum(p3), p3[L$selection[rows]])
   L$market[rows] <- paste0("3 votes R", r, " ", L$market[rows]) }
 
 # ---- Kelly + outputs ---------------------------------------------------------
