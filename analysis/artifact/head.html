@@ -30,8 +30,8 @@ h1{font-size:22px;font-weight:600;margin:0 0 2px;letter-spacing:-.01em}
 .wrap{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
 table{border-collapse:collapse;font-variant-numeric:tabular-nums;white-space:nowrap}
 #tbl{min-width:100%}
-#btbl td:first-child,#btbl th:first-child{max-width:260px;overflow:hidden;text-overflow:ellipsis}
-#btbl td:nth-child(2){text-align:left}
+#btbl td:first-child,#btbl th:first-child{max-width:230px;overflow:hidden;text-overflow:ellipsis}
+#btbl td:nth-child(2),#btbl th:nth-child(2){text-align:left;white-space:normal;min-width:220px;max-width:420px}
 th,td{padding:4px 7px;border-bottom:1px solid var(--line);text-align:right;font-size:12.5px}
 th{position:sticky;top:0;background:var(--head);font-weight:500;cursor:pointer;user-select:none;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);z-index:2}
 th.sorted{color:var(--ink)}
