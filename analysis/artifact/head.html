@@ -81,6 +81,8 @@ td.pos{color:var(--good)} td.neg{color:var(--bad)}
     <label>Search<input id="bq" type="search" placeholder="player / selection"></label>
     <label>Min model p %<input id="minp" type="number" value="0" min="0" max="100" step="5" style="min-width:70px"></label>
     <label>Max model p %<input id="maxp" type="number" value="100" min="0" max="100" step="5" style="min-width:70px"></label>
+    <label>Min odds<input id="minodds" type="number" value="1" min="1" step="0.1" style="min-width:70px"></label>
+    <label>Max odds<input id="maxodds" type="number" value="1000" min="1" step="1" style="min-width:70px"></label>
     <label>Min full-Kelly %<input id="mink" type="number" value="3" min="0" step="1" style="min-width:70px"></label>
     <label>Bankroll $<input id="bank" type="number" value="1000" min="0" step="50" style="min-width:90px"></label>
     <label>Kelly fraction<select id="kf"><option value="0.25">Quarter</option><option value="0.5">Half</option><option value="1">Full</option><option value="0.1">Tenth</option></select></label>

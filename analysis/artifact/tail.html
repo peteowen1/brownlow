@@ -98,9 +98,10 @@ let bsort = {k:'kelly', asc:false};
 function renderBets(){
   const bank = parseFloat($('bank').value)||0, kf = parseFloat($('kf').value), mink=(parseFloat($('mink').value)||0)/100,
         mkt=$('mkt').value, q=$('bq').value.trim().toLowerCase(),
-        minp=(parseFloat($('minp').value)||0)/100, maxp=(parseFloat($('maxp').value)||100)/100;
+        minp=(parseFloat($('minp').value)||0)/100, maxp=(parseFloat($('maxp').value)||100)/100,
+        minodds=parseFloat($('minodds').value)||1, maxodds=parseFloat($('maxodds').value)||1e9;
   D.bets.forEach(b => b.stake = b.kelly*kf*bank);
-  const rows = D.bets.filter(b => b.kelly>=mink && b.p>=minp && b.p<=maxp && (!mkt || b.market===mkt) && (!q || (b.sel+' '+b.market).toLowerCase().includes(q)));
+  const rows = D.bets.filter(b => b.kelly>=mink && b.p>=minp && b.p<=maxp && b.odds>=minodds && b.odds<=maxodds && (!mkt || b.market===mkt) && (!q || (b.sel+' '+b.market).toLowerCase().includes(q)));
   rows.sort((a,b)=>{ const x=a[bsort.k], y=b[bsort.k]; const c=(typeof x==='string')? x.localeCompare(y) : x-y; return bsort.asc? c : -c; });
   const tr=document.createElement('tr');
   bcols.forEach(c => { const th=document.createElement('th'); th.textContent=c.label; if (bsort.k===c.k) th.className='sorted'+(bsort.asc?' asc':'');
@@ -115,7 +116,7 @@ function renderBets(){
   const tot = rows.reduce((a,b)=>a+b.stake,0);
   $('bcount').textContent = rows.length + ' lines, $' + tot.toFixed(0) + ' total stake';
 }
-['bank','kf','mink','minp','maxp','mkt','bq'].forEach(id => $(id).addEventListener('input', renderBets));
+['bank','kf','mink','minp','maxp','minodds','maxodds','mkt','bq'].forEach(id => $(id).addEventListener('input', renderBets));
 renderBets();
 })();
 </script>
