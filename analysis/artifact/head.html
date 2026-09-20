@@ -1,0 +1,93 @@
+<title>Brownlow Vote Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#f6f4ee; --panel:#fffdf8; --ink:#1d1a14; --muted:#6b655a; --line:#dcd6c8;
+  --accent:#8a1c2b; --accent-ink:#fff; --heat:138,28,43; --good:#1f6f43; --bad:#9a2f2f;
+  --row-alt:#f1eee6; --head:#ebe7dc;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#16150f; --panel:#1f1d16; --ink:#efeae0; --muted:#a39c8e; --line:#3a372d;
+  --accent:#d9636f; --accent-ink:#16150f; --heat:217,99,111; --good:#5fc48a; --bad:#e07777;
+  --row-alt:#23211a; --head:#2a2820; }}
+:root[data-theme="dark"]{
+  --bg:#16150f; --panel:#1f1d16; --ink:#efeae0; --muted:#a39c8e; --line:#3a372d;
+  --accent:#d9636f; --accent-ink:#16150f; --heat:217,99,111; --good:#5fc48a; --bad:#e07777;
+  --row-alt:#23211a; --head:#2a2820; }
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:14px;padding-inline:16px;padding-block:18px 40px;margin:0}
+h1{font-size:22px;font-weight:600;margin:0 0 2px;letter-spacing:-.01em}
+.sub{color:var(--muted);margin:0 0 14px;max-width:70ch}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:12px}
+.tabs button{background:none;border:0;border-bottom:2px solid transparent;padding:8px 12px;font:inherit;font-weight:500;color:var(--muted);cursor:pointer}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.controls{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:end;margin-bottom:10px}
+.controls label{display:flex;flex-direction:column;gap:3px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.controls input,.controls select{font:inherit;font-size:13px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:5px 7px;min-width:120px}
+.controls input:focus-visible,.controls select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.note{font-size:12px;color:var(--muted);margin:0 0 8px}
+.wrap{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+table{border-collapse:collapse;font-variant-numeric:tabular-nums;white-space:nowrap}
+#tbl{min-width:100%}
+#btbl td:first-child,#btbl th:first-child{max-width:260px;overflow:hidden;text-overflow:ellipsis}
+#btbl td:nth-child(2){text-align:left}
+th,td{padding:4px 7px;border-bottom:1px solid var(--line);text-align:right;font-size:12.5px}
+th{position:sticky;top:0;background:var(--head);font-weight:500;cursor:pointer;user-select:none;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);z-index:2}
+th.sorted{color:var(--ink)}
+th.sorted::after{content:" \25BE";font-size:9px} th.sorted.asc::after{content:" \25B4"}
+th:first-child,td:first-child{text-align:left;position:sticky;left:0;background:var(--panel);z-index:1;font-weight:500}
+th:first-child{z-index:3;background:var(--head)}
+tbody tr:nth-child(even) td{background:var(--row-alt)} tbody tr:nth-child(even) td:first-child{background:var(--row-alt)}
+td.t{text-align:left;color:var(--muted)}
+td.r{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;min-width:44px}
+td.r.bye{color:var(--muted);opacity:.45}
+td.tot{font-family:"IBM Plex Mono",ui-monospace,monospace;font-weight:500}
+td.pos{color:var(--good)} td.neg{color:var(--bad)}
+.pill{display:inline-block;padding:1px 6px;border-radius:9px;font-size:11px;background:var(--head);color:var(--muted)}
+.legend{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--muted);margin:8px 0 0}
+.legend i{display:inline-block;width:38px;height:10px;border-radius:2px;background:linear-gradient(90deg,rgba(var(--heat),0),rgba(var(--heat),.85))}
+.count{font-size:12px;color:var(--muted);margin-left:auto;align-self:center}
+[hidden]{display:none!important}
+@media (max-width:600px){ .controls input,.controls select{min-width:90px} }
+</style>
+
+<h1>Brownlow Vote Tracker</h1>
+<p class="sub">2026 InTheGame model: expected votes per player per round (the model's probability-weighted 0/1/2/3 for that match), season totals from 5,000 simulated counts, and the Sportsbet lines the model rates as value.</p>
+
+<div class="tabs" role="tablist">
+  <button role="tab" id="tab-rounds" aria-selected="true" aria-controls="panel-rounds">By round</button>
+  <button role="tab" id="tab-bets" aria-selected="false" aria-controls="panel-bets">Value bets</button>
+</div>
+
+<section id="panel-rounds" role="tabpanel">
+  <div class="controls">
+    <label>Search<input id="q" type="search" placeholder="player name"></label>
+    <label>Team<select id="team"><option value="">All teams</option></select></label>
+    <label>Position<select id="pos"><option value="">All</option><option>Mid</option><option>Ruck</option><option>Fwd</option><option>Back</option><option>Int</option></select></label>
+    <label>Raw position<select id="rawpos"><option value="">All</option></select></label>
+    <label>Min season xV<input id="minxv" type="number" value="5" min="0" step="1" style="min-width:70px"></label>
+    <label>Round<select id="rsel"><option value="">All rounds</option></select></label>
+    <span class="count" id="count"></span>
+  </div>
+  <p class="note">Click a column header to sort. Hover a round cell for opponent and the chance of the 3 votes. Blank cells are byes or games not played. xV = expected votes; Sim = mean total across 5,000 simulated counts (± one standard deviation).</p>
+  <div class="wrap"><table id="tbl"><thead></thead><tbody></tbody></table></div>
+  <div class="legend"><span>0</span><i></i><span>3 expected votes</span></div>
+</section>
+
+<section id="panel-bets" role="tabpanel" hidden>
+  <div class="controls">
+    <label>Market<select id="mkt"><option value="">All markets</option></select></label>
+    <label>Search<input id="bq" type="search" placeholder="player / selection"></label>
+    <label>Min model p %<input id="minp" type="number" value="0" min="0" max="100" step="5" style="min-width:70px"></label>
+    <label>Max model p %<input id="maxp" type="number" value="100" min="0" max="100" step="5" style="min-width:70px"></label>
+    <label>Min full-Kelly %<input id="mink" type="number" value="3" min="0" step="1" style="min-width:70px"></label>
+    <label>Bankroll $<input id="bank" type="number" value="1000" min="0" step="50" style="min-width:90px"></label>
+    <label>Kelly fraction<select id="kf"><option value="0.25">Quarter</option><option value="0.5">Half</option><option value="1">Full</option><option value="0.1">Tenth</option></select></label>
+    <span class="count" id="bcount"></span>
+  </div>
+  <p class="note">Model p = simulated probability; Edge = p × odds − 1 (expected return per $1, higher is better); Kelly = full-Kelly bankroll fraction; Stake = Kelly × fraction × bankroll. Only lines with positive edge are listed. "OU multi" rows are two-leg player over/under multis priced on the joint simulated outcome (lift shows how much the two legs help each other; near 1.0 means barely at all). Treat every Gawn / Jackson / Grundy line as one correlated position: they are a single model opinion about rucks.</p>
+  <div class="wrap"><table id="btbl"><thead></thead><tbody></tbody></table></div>
+</section>
+
+<script id="data" type="application/json">

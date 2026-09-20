@@ -2,12 +2,13 @@
 # season totals, and the two-leg multis whose joint probability beats the
 # product of the singles (positively correlated same-direction legs, or
 # negatively correlated opposite-direction legs).
-# Reads the sims cached by analysis/kelly_markets_2026.R.
+# Reads the sims cached by analysis/price_markets_2026.R and the lines pulled by analysis/sportsbet_pull.R.
 suppressMessages({ library(data.table); devtools::load_all(quiet = TRUE) })
-ou <- fread("results/markets/player_ou_lines_20260920.csv")
+L <- fread("results/markets/sportsbet_lines_latest.csv")[grepl(" Votes O/U$", event)]
+ou <- L[, .(player = sub(" Votes O/U$", "", event), side = selection, line = handicap, odds)]
 V <- readRDS("results/markets/votes_sims_2026_5000.rds")
 ep <- fread("results/ensemble_probabilities.csv")[season == 2026]
-ep[, date := as.IDate(date)]; setkey(ep, player_name, team, date)   # same order merge() left it in kelly_markets_2026.R
+ep[, date := as.IDate(date)]; setkey(ep, player_name, team, date)   # same order merge() left it in price_markets_2026.R
 prep <- prepare_season_sim(ep); keys <- unique(prep$player_key)
 R <- uniqueN(ep$match_id) ; R <- 25L   # rounds 0-24
 cell_pid <- rep(seq_along(keys), each = R)

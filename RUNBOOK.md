@@ -18,13 +18,19 @@
   `https://www.sportsbet.com.au/apigw/sportsbook-sports/Sportsbook/Sports/Events/{eventId}/Markets`
   (`/SportMarkets` is a 404) with a browser User-Agent and `Accept: application/json`;
   class listing `.../Sportsbook/Sports/Competitions/27508/Events` (Brownlow, 20 events).
-  Event ids are the trailing number in each market URL (outright `9641792`,
-  3-vote games `10922196`-`10922220`, teams `10819433`-`10819450`, player O/U
-  `10911131`-`10911208`). Raw pulls: `results/markets/sportsbet_raw/`.
-  O/U pricing + correlated multis: `analysis/ou_correlated_multis.R`. The
-  hand-typed odds in `kelly_markets_2026.R` should be replaced by API pulls
-  before the next reprice. Pattern is written up for other verses in
-  `C:\dev\ECOSYSTEM.md` §3.
+  Competition ids: 6136 (medal, hub, exotics, leader-after, groups), 16767
+  (3-vote games, one market per match), 28057 (team most votes), 24522 (poll
+  N+ / to poll a vote), 27508 (player O/U). Raw pulls: `results/markets/sportsbet_raw/<stamp>/`.
+- **ONE COMMAND to reprice everything and rebuild the page (~50 s):**
+  `powershell.exe -Command 'Rscript "analysis/reprice.R"'` = `sportsbet_pull.R`
+  (all 5 classes → `sportsbet_lines_latest.csv`, 2,113 selections on 20 Sep)
+  → `price_markets_2026.R` (generic pricer keyed on event/market name; prints
+  any unpriced lines, 0 on 20 Sep) → `ou_correlated_multis.R` →
+  `build_artifact_data.R` (writes `results/markets/brownlow-vote-tracker.html`).
+  Then publish that file with the Artifact tool passing
+  `url = https://claude.ai/artifact/GdnuLLmYyM5G5zzwNJHJfT`. Page templates live
+  in `analysis/artifact/head.html` + `tail.html`. Pattern is written up for the
+  other verses in `C:\dev\ECOSYSTEM.md` §3.
 - Kelly caveat carried over: Gawn / Jackson / Grundy lines dominate the edge
   list and are one correlated ruck opinion; ruck calibration 2019-25 checks out
   (actual/pred 0.93-1.11) so it is a real view, size it as one bet.
