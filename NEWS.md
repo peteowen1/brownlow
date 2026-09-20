@@ -3,6 +3,16 @@
 This file starts at 0.2.0. Earlier versions are documented in the commit
 history and in `POSTMORTEM-2025.md`.
 
+# brownlow 0.2.9
+
+Bookmaker pricing off the 2026 simulation, no package code change.
+`analysis/sportsbet_pull.R` reads every Brownlow market from Sportsbet's JSON
+API; `analysis/price_markets_2026.R` prices each selection against a cached
+per-round 5,000-season simulation and writes the Kelly table;
+`analysis/ou_correlated_multis.R` prices player over/unders and two-leg
+multis; `analysis/reprice.R` chains them with the artifact page build.
+Runbook updated for count night.
+
 # brownlow 0.2.8
 
 Documentation only; no code change. `RUNBOOK.md`'s "Next session starts
