@@ -1,5 +1,40 @@
 # Deadline-day runbook — Brownlow Datathon 2026
 
+## 21 September (count night) — start here
+
+- **Submission SENT 20 Sep** (Pete emailed the CSV to datathon@betfair.com.au; MS To-Do item closed). Nothing further to do for the datathon until results.
+
+- **Sims for market analysis are on disk, keep them:**
+  `results/markets/votes_sims_2026_5000.rds` — integer matrix, rows are
+  (player × round) cells in the order `analysis/kelly_markets_2026.R` builds
+  (`cell_pid` / `cell_rnd`), columns are 5,000 simulated seasons, seed 2026,
+  Plackett-Luce sampler on the 2026 ensemble probabilities. Sibling CSVs:
+  `sportsbet_2026_kelly.csv` (every priced line, 20 Sep odds),
+  `expected_votes_by_round_2026.csv`, `player_summary_2026.csv`.
+  Re-running the script reads the cache (20 s); delete the RDS to redraw.
+- **Artifact:** https://claude.ai/artifact/GdnuLLmYyM5G5zzwNJHJfT (by-round
+  xV table + value-bet tab). Republish from this repo's session or pass the URL.
+- **Sportsbet live prices (VERIFIED 20 Sep, works from plain curl):**
+  `https://www.sportsbet.com.au/apigw/sportsbook-sports/Sportsbook/Sports/Events/{eventId}/Markets`
+  (`/SportMarkets` is a 404) with a browser User-Agent and `Accept: application/json`;
+  class listing `.../Sportsbook/Sports/Competitions/27508/Events` (Brownlow, 20 events).
+  Competition ids: 6136 (medal, hub, exotics, leader-after, groups), 16767
+  (3-vote games, one market per match), 28057 (team most votes), 24522 (poll
+  N+ / to poll a vote), 27508 (player O/U). Raw pulls: `results/markets/sportsbet_raw/<stamp>/`.
+- **ONE COMMAND to reprice everything and rebuild the page (~50 s):**
+  `powershell.exe -Command 'Rscript "analysis/reprice.R"'` = `sportsbet_pull.R`
+  (all 5 classes → `sportsbet_lines_latest.csv`, 2,113 selections on 20 Sep)
+  → `price_markets_2026.R` (generic pricer keyed on event/market name; prints
+  any unpriced lines, 0 on 20 Sep) → `ou_correlated_multis.R` →
+  `build_artifact_data.R` (writes `results/markets/brownlow-vote-tracker.html`).
+  Then publish that file with the Artifact tool passing
+  `url = https://claude.ai/artifact/GdnuLLmYyM5G5zzwNJHJfT`. Page templates live
+  in `analysis/artifact/head.html` + `tail.html`. Pattern is written up for the
+  other verses in `C:\dev\ECOSYSTEM.md` §3.
+- Kelly caveat carried over: Gawn / Jackson / Grundy lines dominate the edge
+  list and are one correlated ruck opinion; ruck calibration 2019-25 checks out
+  (actual/pred 0.93-1.11) so it is a real view, size it as one bet.
+
 ## Next session starts here
 
 **State as of 12 September 2026.** The 2026 submission is built, correct, and

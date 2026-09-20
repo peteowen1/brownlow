@@ -1,0 +1,121 @@
+</script>
+<script>
+(function(){
+const D = JSON.parse(document.getElementById('data').textContent);
+const R = D.rounds;
+if (D.pulled_at) { const st=D.pulled_at; document.querySelector('.sub').textContent += ` Odds pulled ${st.slice(6,8)}/${st.slice(4,6)}/${st.slice(0,4)} ${st.slice(9,11)}:${st.slice(11,13)} AEST.`; }
+const GROUP = {RK:'Ruck', C:'Mid', R:'Mid', RR:'Mid', WL:'Mid', WR:'Mid',
+  FF:'Fwd', CHF:'Fwd', FPL:'Fwd', FPR:'Fwd', HFFL:'Fwd', HFFR:'Fwd',
+  FB:'Back', CHB:'Back', BPL:'Back', BPR:'Back', HBFL:'Back', HBFR:'Back', INT:'Int', EMERG:'Int'};
+D.players.forEach(p => { p.total = p.xv.reduce((a,v)=>a+(v||0),0); p.grp = GROUP[p.pos] || 'Int'; p.best = Math.max(...p.xv.map(v=>v||0)); });
+
+const $ = id => document.getElementById(id);
+const opt = (sel, vals) => vals.forEach(v => { const o=document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o); });
+opt($('team'), [...new Set(D.players.map(p=>p.t))].sort());
+opt($('rawpos'), [...new Set(D.players.map(p=>p.pos))].sort());
+opt($('rsel'), R.map(r => 'R'+r));
+opt($('mkt'), [...new Set(D.bets.map(b=>b.market))]);
+
+// ---- tabs
+const tabs = ['rounds','bets'];
+tabs.forEach(t => $('tab-'+t).addEventListener('click', () => {
+  tabs.forEach(u => { $('tab-'+u).setAttribute('aria-selected', u===t); $('panel-'+u).hidden = u!==t; });
+  try { localStorage.setItem('bvt-tab', t); } catch(e){}
+}));
+try { const t = localStorage.getItem('bvt-tab'); if (t && tabs.includes(t)) $('tab-'+t).click(); } catch(e){}
+
+// ---- rounds table
+const fixed = [
+  {k:'n', label:'Player', num:false},
+  {k:'t', label:'Team', num:false, cls:'t'},
+  {k:'pos', label:'Pos', num:false, cls:'t'},
+  {k:'games', label:'G', num:true},
+  {k:'total', label:'Season xV', num:true, cls:'tot', fmt:v=>v.toFixed(1)},
+  {k:'mean', label:'Sim', num:true, fmt:(v,p)=>v.toFixed(1)+' ±'+p.sd.toFixed(0)},
+  {k:'win', label:'Win %', num:true, fmt:v=>v>=1?v.toFixed(0):v>0?v.toFixed(1):'–'},
+  {k:'top3', label:'Top3 %', num:true, fmt:v=>v>0?v.toFixed(0):'–'},
+  {k:'top10', label:'Top10 %', num:true, fmt:v=>v>0?v.toFixed(0):'–'},
+];
+let sort = {k:'total', asc:false, round:null};
+function heat(v){ const a = Math.min(v/3,1)*0.85; return `background:rgba(var(--heat),${a.toFixed(2)})`; }
+
+function renderHead(){
+  const tr = document.createElement('tr');
+  fixed.forEach(c => { const th=document.createElement('th'); th.textContent=c.label; th.dataset.k=c.k;
+    if (sort.k===c.k && sort.round===null) th.className='sorted'+(sort.asc?' asc':'');
+    th.addEventListener('click', () => { if (sort.k===c.k && sort.round===null) sort.asc=!sort.asc; else { sort={k:c.k, asc:!c.num, round:null}; } render(); });
+    tr.appendChild(th); });
+  R.forEach((r,i) => { const th=document.createElement('th'); th.textContent='R'+r; th.title='Round '+r;
+    if (sort.round===i) th.className='sorted'+(sort.asc?' asc':'');
+    th.addEventListener('click', () => { if (sort.round===i) sort.asc=!sort.asc; else sort={k:null, asc:false, round:i}; render(); });
+    tr.appendChild(th); });
+  const th = $('tbl').tHead; th.innerHTML=''; th.appendChild(tr);
+}
+function filtered(){
+  const q=$('q').value.trim().toLowerCase(), team=$('team').value, grp=$('pos').value, raw=$('rawpos').value,
+        min=parseFloat($('minxv').value)||0, rs=$('rsel').value, ri = rs? R.indexOf(+rs.slice(1)) : -1;
+  return D.players.filter(p => (!q || p.n.toLowerCase().includes(q)) && (!team || p.t===team) && (!grp || p.grp===grp)
+    && (!raw || p.pos===raw) && p.total>=min && (ri<0 || p.xv[ri]!=null));
+}
+function render(){
+  renderHead();
+  const rows = filtered();
+  const key = p => sort.round!==null ? (p.xv[sort.round] ?? -1) : p[sort.k];
+  rows.sort((a,b) => { const x=key(a), y=key(b); const c = (typeof x==='string') ? x.localeCompare(y) : (x-y); return sort.asc? c : -c; });
+  const rs=$('rsel').value, ri = rs? R.indexOf(+rs.slice(1)) : -1;
+  const tb = $('tbl').tBodies[0]; const frag=document.createDocumentFragment();
+  rows.slice(0,400).forEach(p => {
+    const tr=document.createElement('tr');
+    fixed.forEach(c => { const td=document.createElement('td'); const v=p[c.k]; td.textContent = c.fmt? c.fmt(v,p) : v; if (c.cls) td.className=c.cls; tr.appendChild(td); });
+    R.forEach((r,i) => { const td=document.createElement('td'); const v=p.xv[i]; td.className='r';
+      if (v==null) { td.textContent=''; td.classList.add('bye'); }
+      else { td.textContent=v.toFixed(2); td.style=heat(v); td.title = `R${r} v ${p.op[i]} — expected ${v.toFixed(2)} votes`; }
+      if (ri>=0 && i!==ri) td.hidden = true;
+      tr.appendChild(td); });
+    frag.appendChild(tr);
+  });
+  tb.innerHTML=''; tb.appendChild(frag);
+  // hide non-selected round headers too
+  const ths = $('tbl').tHead.rows[0].cells; R.forEach((r,i)=>{ ths[fixed.length+i].hidden = (ri>=0 && i!==ri); });
+  $('count').textContent = rows.length + ' players' + (rows.length>400 ? ' (showing 400)' : '');
+}
+['q','team','pos','rawpos','minxv','rsel'].forEach(id => $(id).addEventListener('input', render));
+render();
+
+// ---- bets table
+const bcols = [
+  {k:'market', label:'Market', num:false, cls:'t'},
+  {k:'sel', label:'Selection', num:false},
+  {k:'odds', label:'Odds', num:true, fmt:v=>v.toFixed(2)},
+  {k:'p', label:'Model p', num:true, fmt:v=>(100*v).toFixed(1)+'%'},
+  {k:'implied', label:'Book p', num:true, fmt:v=>(100*v).toFixed(1)+'%'},
+  {k:'edge', label:'Edge', num:true, fmt:v=>(100*v).toFixed(0)+'%', sign:true},
+  {k:'kelly', label:'Full Kelly', num:true, fmt:v=>(100*v).toFixed(1)+'%'},
+  {k:'stake', label:'Stake', num:true, fmt:v=>'$'+v.toFixed(0)},
+];
+D.bets.forEach(b => { b.implied = 1/b.odds; });
+let bsort = {k:'kelly', asc:false};
+function renderBets(){
+  const bank = parseFloat($('bank').value)||0, kf = parseFloat($('kf').value), mink=(parseFloat($('mink').value)||0)/100,
+        mkt=$('mkt').value, q=$('bq').value.trim().toLowerCase(),
+        minp=(parseFloat($('minp').value)||0)/100, maxp=(parseFloat($('maxp').value)||100)/100;
+  D.bets.forEach(b => b.stake = b.kelly*kf*bank);
+  const rows = D.bets.filter(b => b.kelly>=mink && b.p>=minp && b.p<=maxp && (!mkt || b.market===mkt) && (!q || (b.sel+' '+b.market).toLowerCase().includes(q)));
+  rows.sort((a,b)=>{ const x=a[bsort.k], y=b[bsort.k]; const c=(typeof x==='string')? x.localeCompare(y) : x-y; return bsort.asc? c : -c; });
+  const tr=document.createElement('tr');
+  bcols.forEach(c => { const th=document.createElement('th'); th.textContent=c.label; if (bsort.k===c.k) th.className='sorted'+(bsort.asc?' asc':'');
+    th.addEventListener('click', ()=>{ if (bsort.k===c.k) bsort.asc=!bsort.asc; else bsort={k:c.k, asc:!c.num}; renderBets(); }); tr.appendChild(th); });
+  const th=$('btbl').tHead; th.innerHTML=''; th.appendChild(tr);
+  const tb=$('btbl').tBodies[0]; const frag=document.createDocumentFragment();
+  rows.forEach(b => { const r=document.createElement('tr');
+    bcols.forEach(c => { const td=document.createElement('td'); const v=b[c.k]; td.textContent = c.fmt? c.fmt(v) : v;
+      if (c.cls) td.className=c.cls; if (c.sign) td.className = v>0?'pos':'neg'; r.appendChild(td); });
+    frag.appendChild(r); });
+  tb.innerHTML=''; tb.appendChild(frag);
+  const tot = rows.reduce((a,b)=>a+b.stake,0);
+  $('bcount').textContent = rows.length + ' lines, $' + tot.toFixed(0) + ' total stake';
+}
+['bank','kf','mink','minp','maxp','mkt','bq'].forEach(id => $(id).addEventListener('input', renderBets));
+renderBets();
+})();
+</script>
