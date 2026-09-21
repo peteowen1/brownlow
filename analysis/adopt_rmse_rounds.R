@@ -49,13 +49,22 @@ if (!file.exists(BACKUP)) {
 }
 
 tuning$best_iteration <- as.integer(res$nrounds)
-tuning$provenance <- c(tuning$provenance, list(
+# Replace these keys rather than append them. c() on a list happily creates
+# DUPLICATE names and `[[` then returns the FIRST match, so the second run of
+# this script left provenance reporting the FIRST run's 1100 while
+# best_iteration held the second run's 1000 -- a provenance record that
+# contradicts the artifact it describes, which is worse than having none.
+# (Same defect, same file, as the BACKUP filename fixed above.)
+record <- list(
   rounds_metric     = "rmse_ipf",
   rounds_selected   = as.integer(res$nrounds),
   rounds_score      = res$score,
   rounds_adopted_at = format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
   rounds_note       = "Sec 5k: mlogloss picked 400, RMSE picks ~1200; curve flat 600-1500"
-))
+)
+kept <- tuning$provenance[setdiff(names(tuning$provenance), names(record))]
+tuning$provenance <- c(kept, record)
+stopifnot("provenance has duplicate keys" = !anyDuplicated(names(tuning$provenance)))
 saveRDS(tuning, "models/xgboost_tuning_results.rds")
 
 cat(sprintf("\nadopted best_iteration: %d (rmse_ipf %.5f)\n", tuning$best_iteration, res$score))
