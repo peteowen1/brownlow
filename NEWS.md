@@ -3,6 +3,30 @@
 This file starts at 0.2.0. Earlier versions are documented in the commit
 history and in `POSTMORTEM-2025.md`.
 
+# brownlow 0.2.10
+
+* Live in-count tracking. `analysis/live_count.R` pulls the AFL vote feed during
+  the count, treats matches already read out as facts and re-simulates only the
+  unread ones, driving the Brownlow Vote Tracker artifact via
+  `analysis/live_refresh.ps1`.
+
+* `simulate_counts_vectorised()` draws every simulation of a match at once using
+  the exponential-race form of Plackett-Luce. Measured 37x faster than the
+  per-simulation loop (`analysis/benchmark_vectorised_sampler.R`), and checked
+  against the sequential sampler by `analysis/validate_vectorised_sampler.R`.
+
+* `POSTMORTEM-2026.md`: we finished 7th of 23 at 0.29467 RMSE. Four theories for
+  closing the gap were tested and are worth about 9% of it between them; the
+  remainder is discrimination, not calibration.
+
+* `analysis/adopt_rmse_rounds.R` appended to its provenance list rather than
+  replacing by key, so after two runs the provenance reported 1,100 rounds while
+  `best_iteration` held 1,000. Fixed, and the fix repairs an already-corrupted
+  list as well as preventing new ones.
+
+* `live_count.R` now stops rather than publishing a wrong number when a feed
+  player name does not match our data, or when a match does not total 6 votes.
+
 # brownlow 0.2.9
 
 Bookmaker pricing off the 2026 simulation, no package code change.
