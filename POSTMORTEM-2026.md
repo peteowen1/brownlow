@@ -74,17 +74,19 @@ That is also exactly why MAE ranks 19th while RMSE ranks 7th.
 The decidability bar for this setup is **0.00055** RMSE (pooled seed sd 0.00028,
 doubled — POSTMORTEM-2025 §5a and §5p). Anything below it is not a result.
 
-| Theory | Verdict | Worth |
+| Theory | Verdict | Worth on 2026, fitted on prior seasons |
 |---|---|---|
-| Under-confidence — sharpen the favourite | Real | **+0.0021** ceiling; +0.0020 on a recent-season fit |
-| Defender over-prediction | 2026-only artefact | 0 out of sample |
+| Under-confidence — sharpen the favourite | Real | **+0.00056** (beta 2.0); +0.0021 at the hindsight optimum |
+| Defender over-prediction | No stable optimum across seasons | +0.00057 — sits *on* the decidability bar |
 | Stale player effects | Direction right, magnitude null | ~0 — skip the GAM refit |
 | Selection on mlogloss not RMSE | Already fixed pre-season, both axes | −0.0004, inside noise |
+| Sharpening and defender damping together | best honest combination | **+0.00094** |
 
-Against a **0.0222** gap to `jt`, all four together are worth about 0.002 —
-**9%**.
+Against a **0.0222** gap to `jt`, the best honestly-fitted combination of all of
+them is 0.00094 — **4%**. The hindsight ceiling, choosing every parameter
+knowing the answer, is about 0.003, or 14%.
 
-### 3a. Sharpening — the only effect above the noise bar
+### 3a. Sharpening — real, and the one with a stable optimum
 
 `analysis/postmortem_2026_whatif.R`. Raise the 1/2/3 columns to a power, re-run
 IPF so each match still carries exactly one 3, one 2 and one 1. At beta = 1 the
@@ -96,25 +98,39 @@ seasons all optimise at 1.2–1.4, so a "last three seasons" rule would have
 picked 1.3 and captured 0.00199 — but that rule was only noticed *after* seeing
 it work, so it is a post-hoc selection, not a validated one.
 
-Worth roughly one place on the leaderboard, not three.
+Worth roughly one place on the leaderboard, not three. Unlike the defender
+multiplier in 3b, the beta optimum at least sits in a consistent region across
+recent seasons, which is what makes it the more adoptable of the two.
 
-### 3b. Defenders — a one-season artefact, not a model flaw
+### 3b. Defenders — a real 2026 bias with no learnable correction
 
 We gave backs 161 season votes against a real 100, and took 58 off the
-midfielders. That looked like a systematic feature problem. It is not.
+midfielders. The 2026 bias is real and large in vote terms. What it is not is
+correctable from history.
 
-Defender multiplier, RMSE by season (`analysis/postmortem_2026_arms_pq.R`):
+Defender multiplier swept over all twelve seasons
+(`analysis/postmortem_2026_whatif.R`, table in
+`analysis/harness/whatif_position_sweep.csv`). The factor that minimises RMSE
+in each season separately:
 
-| Factor | 2023 | 2024 | 2025 | 2026 |
-|---|---|---|---|---|
-| 0.4 | 0.33924 | 0.33234 | 0.32157 | **0.28839** |
-| 0.8 | **0.33806** | 0.33046 | 0.31939 | 0.29027 |
-| 1.0 | 0.33813 | **0.33035** | 0.31913 | 0.29140 |
-| 1.1 | 0.33824 | 0.33039 | **0.31909** | 0.29196 |
+| Season | 2015 | 2016 | 2017 | 2018 | 2019 | 2020 | 2021 | 2022 | 2023 | 2024 | 2025 | **2026** |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Best factor | 0.8 | 1.1 | 1.2 | 1.2 | 0.7 | 0.6 | 0.8 | 0.7 | 0.8 | 1.0 | 1.1 | **0.4** |
 
-2026 wants heavy damping; **every prior season wants a factor of ~1.0**, and
-2025 marginally wants defenders pushed *up*. Fitted honestly the rule picks 1.0
-and delivers nothing.
+**There is no stable optimum.** The per-season argmin scatters from 0.4 to 1.2
+with no trend, and 2026's 0.4 is the most extreme value in twelve years. Pooled
+over 2015-2025 the fit picks 0.9, but 0.8, 0.9 and 1.0 are separated by
+**0.00003** mean RMSE — a three-way tie, not a choice.
+
+Applied to 2026 that fitted 0.9 gives 0.29083 against a 0.29140 baseline, a gain
+of **0.00057** — sitting exactly on the 0.00055 decidability bar. So the honest
+verdict is *unresolved and unreliable*, not "worth nothing": you cannot pick a
+defender multiplier from history with any confidence, and the one you would pick
+buys an amount indistinguishable from noise.
+
+An earlier draft of this section said the fit "picks 1.0 and delivers nothing",
+which came from sweeping only 2023-2025. The twelve-season sweep is the better
+evidence and it is committed.
 
 *Loose end:* if 2023-25 were in-sample for the model, a good fit there could
 mask a real bias. Evidence against — 2026 scores better (0.291) than all three
@@ -219,8 +235,11 @@ Smaller, concrete:
    comparison sheet — Harrison/Harry Petty, Matthew/Matt Carroll, the two Bailey
    Williamses. Costs nothing to fix and makes every cross-model comparison exact.
 2. **Sharpening is worth adopting on principle**, the way RMSE round selection
-   was: pick beta on the three most recent seasons, expect ~0.002, do not expect
-   it to be decidable.
+   was: select beta the same way the round count was selected, and expect
+   +0.0006 from a prior-season fit — on the decidability bar, not above it. Do
+   not expect the +0.0021 hindsight figure; that beta was chosen knowing the
+   answer. Do NOT adopt a defender multiplier: 3b shows there is no stable one
+   to learn.
 3. **`2025-03-29_Brisbane_Geelong` has no votes in the datathon file.** A match
    scored as all-zeros silently rewards whichever model predicts least. Chase it
    before it contaminates a 2027 fit.
