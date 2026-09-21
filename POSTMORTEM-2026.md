@@ -86,6 +86,10 @@ Against a **0.0222** gap to `jt`, the best honestly-fitted combination of all of
 them is 0.00094 — **4%**. The hindsight ceiling, choosing every parameter
 knowing the answer, is about 0.003, or 14%.
 
+Every figure in that table is reproduced by `analysis/postmortem_2026_arms_final.R`
+into `analysis/harness/whatif_arms_2026.csv`, which reads the fitted parameters
+back out of the committed sweeps rather than re-choosing them.
+
 ### 3a. Sharpening — real, and the one with a stable optimum
 
 `analysis/postmortem_2026_whatif.R`. Raise the 1/2/3 columns to a power, re-run

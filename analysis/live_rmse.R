@@ -94,4 +94,4 @@ print(res[, .(rank, model, rmse = round(rmse, 5), mae = round(mae, 5))], nrow = 
 # analysis/harness/ is committed; results/ is gitignored, and this table is the
 # leaderboard POSTMORTEM-2026.md Sec 1 quotes.
 fwrite(res, "analysis/harness/live_rmse.csv")
-cat("\nwritten: results/markets/live_rmse.csv\n")
+cat("\nwritten: analysis/harness/live_rmse.csv\n")

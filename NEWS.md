@@ -3,6 +3,22 @@
 This file starts at 0.2.0. Earlier versions are documented in the commit
 history and in `POSTMORTEM-2025.md`.
 
+# brownlow 0.2.11
+
+* The post-mortem's leaderboard, sharpening-sweep and defender-sweep tables now
+  write to `analysis/harness/` rather than the gitignored `results/`, so the
+  numbers quoted in `POSTMORTEM-2026.md` have committed evidence behind them.
+
+* POSTMORTEM-2026.md Sec 3b corrected. Swept over all twelve seasons rather than
+  2023-2025, the defender multiplier has no stable optimum (per-season argmin
+  scatters 0.4 to 1.2) and the pooled fit gains 0.00057 on 2026 — exactly on the
+  decidability bar. The verdict moves from "worth nothing" to "real bias, no
+  learnable correction", and Sec 5 now says not to adopt one.
+
+* `analysis/postmortem_2026_whatif.R` persists its first sweep as soon as it
+  completes instead of writing everything at the end, so an interrupted run no
+  longer discards work it had already finished.
+
 # brownlow 0.2.10
 
 * Live in-count tracking. `analysis/live_count.R` pulls the AFL vote feed during
