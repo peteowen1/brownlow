@@ -17,7 +17,7 @@ opt($('rsel'), R.map(r => 'R'+r));
 opt($('mkt'), [...new Set(D.bets.map(b=>b.market))]);
 
 // ---- tabs
-const tabs = ['rounds','bets'];
+const tabs = ['live','rounds','bets'];
 tabs.forEach(t => $('tab-'+t).addEventListener('click', () => {
   tabs.forEach(u => { $('tab-'+u).setAttribute('aria-selected', u===t); $('panel-'+u).hidden = u!==t; });
   try { localStorage.setItem('bvt-tab', t); } catch(e){}
@@ -98,9 +98,10 @@ let bsort = {k:'kelly', asc:false};
 function renderBets(){
   const bank = parseFloat($('bank').value)||0, kf = parseFloat($('kf').value), mink=(parseFloat($('mink').value)||0)/100,
         mkt=$('mkt').value, q=$('bq').value.trim().toLowerCase(),
-        minp=(parseFloat($('minp').value)||0)/100, maxp=(parseFloat($('maxp').value)||100)/100;
+        minp=(parseFloat($('minp').value)||0)/100, maxp=(parseFloat($('maxp').value)||100)/100,
+        minodds=parseFloat($('minodds').value)||1, maxodds=parseFloat($('maxodds').value)||1e9;
   D.bets.forEach(b => b.stake = b.kelly*kf*bank);
-  const rows = D.bets.filter(b => b.kelly>=mink && b.p>=minp && b.p<=maxp && (!mkt || b.market===mkt) && (!q || (b.sel+' '+b.market).toLowerCase().includes(q)));
+  const rows = D.bets.filter(b => b.kelly>=mink && b.p>=minp && b.p<=maxp && b.odds>=minodds && b.odds<=maxodds && (!mkt || b.market===mkt) && (!q || (b.sel+' '+b.market).toLowerCase().includes(q)));
   rows.sort((a,b)=>{ const x=a[bsort.k], y=b[bsort.k]; const c=(typeof x==='string')? x.localeCompare(y) : x-y; return bsort.asc? c : -c; });
   const tr=document.createElement('tr');
   bcols.forEach(c => { const th=document.createElement('th'); th.textContent=c.label; if (bsort.k===c.k) th.className='sorted'+(bsort.asc?' asc':'');
@@ -115,7 +116,270 @@ function renderBets(){
   const tot = rows.reduce((a,b)=>a+b.stake,0);
   $('bcount').textContent = rows.length + ' lines, $' + tot.toFixed(0) + ' total stake';
 }
-['bank','kf','mink','minp','maxp','mkt','bq'].forEach(id => $(id).addEventListener('input', renderBets));
+['bank','kf','mink','minp','maxp','minodds','maxodds','mkt','bq'].forEach(id => $(id).addEventListener('input', renderBets));
 renderBets();
+
+// ---- live count
+// The page drives itself: it pulls the AFL vote feed directly (api.afl.com.au
+// allows this origin), works out which matches have been read out, and then
+// re-simulates ONLY the unread ones in chunks, refining the numbers as it goes.
+// Everything baked in at build time is a fallback for when that fetch fails.
+const L = D.live, M = D.live_meta, MT = D.matches, NP = D.players.length, NR = R.length;
+opt($('lteam'), [...new Set(L.map(p=>p.t))].sort());
+const pct = v => v>=10 ? v.toFixed(0) : v>=0.1 ? v.toFixed(1) : v>0 ? v.toFixed(2) : '–';
+
+const TEAM = {"Adelaide Crows":"Adelaide","Brisbane Lions":"Brisbane","Carlton":"Carlton",
+  "Collingwood":"Collingwood","Essendon":"Essendon","Fremantle":"Fremantle","Geelong Cats":"Geelong",
+  "Gold Coast SUNS":"Gold Coast","GWS GIANTS":"Greater Western Sydney","Hawthorn":"Hawthorn",
+  "Melbourne":"Melbourne","North Melbourne":"North Melbourne","Port Adelaide":"Port Adelaide",
+  "Richmond":"Richmond","St Kilda":"St Kilda","Sydney Swans":"Sydney","West Coast Eagles":"West Coast",
+  "Western Bulldogs":"Western Bulldogs"};
+const sq = s => s.toLowerCase().replace(/[^a-z]/g,'');
+const ridx = {}; R.forEach((r,i)=> ridx[r]=i);
+const teamOf = D.players.map(p=>p.t);
+const pByKey = new Map(); D.players.forEach((p,i)=> pByKey.set(sq(p.n)+'|'+p.t, i));
+const mByRT = new Map();
+MT.forEach((m,mi) => m.p.forEach(pi => mByRT.set(m.r+'|'+teamOf[pi], mi)));
+
+let S = null, feedNote = 'baked-in snapshot';
+async function pullVotes(){
+  const tk = await (await fetch('https://api.afl.com.au/cfs/afl/WMCTok', {method:'POST'})).json();
+  const res = await fetch('https://api.afl.com.au/cfs/afl/bfawards/leaderboard/season/CD_S2026014?_='+Date.now(),
+                          {headers:{'x-media-mis-token': tk.token}});
+  if (!res.ok) throw new Error('feed '+res.status);
+  const d = await res.json();
+  const read = new Int32Array(NP), cell = new Int8Array(NP*NR).fill(-1), settled = new Set();
+  let votes = 0, lost = 0, lastRound = -1;
+  for (const row of d.leaderboard){
+    const tm = TEAM[row.team.teamName];
+    const pi = pByKey.get(sq(row.player.givenName+row.player.surname)+'|'+tm);
+    for (const v of row.roundByRoundVotes){
+      votes += v.votes;
+      if (v.roundNumber > lastRound) lastRound = v.roundNumber;
+      const mi = mByRT.get(v.roundNumber+'|'+tm);
+      if (mi != null) settled.add(mi);
+      if (pi == null) { lost += v.votes; continue; }
+      read[pi] += v.votes;
+      const ri = ridx[v.roundNumber]; if (ri != null) cell[pi*NR+ri] = v.votes;
+    }
+  }
+  for (const mi of settled){ const m = MT[mi], ri = ridx[m.r];
+    for (const pi of m.p) if (cell[pi*NR+ri] < 0) cell[pi*NR+ri] = 0; }
+  return {read, cell, settled, votes, lost, lastRound, status:d.status, at:new Date()};
+}
+
+const MAXV = 101, MARKS = [400,1000,2500,5000,10000,20000], CAP = 200000;
+let acc = null, unread = [], simTimer = null, markI = 0, nextRender = 400;
+const tot = new Int32Array(NP), best = new Int32Array(20);
+function resetSim(){
+  unread = MT.filter((m,i) => !S.settled.has(i));
+  acc = {n:0, sum:new Float64Array(NP), sq:new Float64Array(NP), win:new Float64Array(NP),
+         t3:new Float64Array(NP), t5:new Float64Array(NP), t10:new Float64Array(NP),
+         t20:new Float64Array(NP), hist:new Int32Array(NP*MAXV)};
+  markI = 0; nextRender = MARKS[0];
+  clearTimeout(simTimer); simTimer = setTimeout(tick, 0);
+}
+function runChunk(k){
+  for (let s=0;s<k;s++){
+    tot.set(S.read);
+    for (let mi=0;mi<unread.length;mi++){
+      const m = unread[mi], w = m.w, p = m.p, K = w.length;
+      let b1=-1,b2=-1,b3=-1,v1=Infinity,v2=Infinity,v3=Infinity;
+      for (let j=0;j<K;j++){
+        const x = -Math.log(Math.random())/w[j];
+        if (x<v1){v3=v2;b3=b2;v2=v1;b2=b1;v1=x;b1=j;}
+        else if (x<v2){v3=v2;b3=b2;v2=x;b2=j;}
+        else if (x<v3){v3=x;b3=j;}
+      }
+      tot[p[b1]]+=3; tot[p[b2]]+=2; tot[p[b3]]+=1;
+    }
+    // the twenty largest totals in this count, duplicates kept: "top 3" means
+    // "at least the third largest value", which is how an equal third is scored.
+    // Most players fail the first comparison, so the insert almost never runs.
+    best.fill(-1);
+    for (let i=0;i<NP;i++){ const v=tot[i];
+      if (v<=best[19]) continue;
+      let j=19; while (j>0 && best[j-1]<v){ best[j]=best[j-1]; j--; }
+      best[j]=v;
+    }
+    const b0=best[0], b3=best[2], b5=best[4], b10=best[9], b20=best[19];
+    let nmax=0; for (let i=0;i<NP;i++) if (tot[i]===b0) nmax++;
+    const outright = nmax===1;
+    for (let i=0;i<NP;i++){ const v=tot[i];
+      acc.sum[i]+=v; acc.sq[i]+=v*v;
+      if (v<MAXV) acc.hist[i*MAXV+v]++;
+      if (v>=b20){
+        acc.t20[i]++;
+        if (v>=b10) acc.t10[i]++;
+        if (v>=b5) acc.t5[i]++;
+        if (v>=b3) acc.t3[i]++;
+        if (outright && v===b0) acc.win[i]++;
+      }
+    }
+    acc.n++;
+  }
+}
+function applyVotes(){
+  L.forEach(p => { const i=p.pi;
+    p.read = S.read[i];
+    p.av = R.map((r,ri) => { const v = S.cell[i*NR+ri]; return v<0 ? null : v; });
+    p.gl = 0; });
+  unread.forEach(m => m.p.forEach(pi => { const row = byPi[pi]; if (row) row.gl++; }));
+  L.forEach(scoreToDate);
+}
+function applyStats(){
+  const n = acc.n, lo = 0.1*n, hi = 0.9*n;
+  L.forEach(p => { const i=p.pi, base=i*MAXV;
+    const mean = acc.sum[i]/n;
+    p.proj = mean; p.sd = Math.sqrt(Math.max(0, acc.sq[i]/n - mean*mean));
+    p.win = 100*acc.win[i]/n; p.top3 = 100*acc.t3[i]/n; p.top5 = 100*acc.t5[i]/n;
+    p.top10 = 100*acc.t10[i]/n; p.top20 = 100*acc.t20[i]/n;
+    p.dwin = p.win - (p.pre || 0);
+    let c=0, got=false; p.q10=0; p.q90=0;
+    for (let v=0; v<MAXV; v++){ c += acc.hist[base+v];
+      if (!got && c>=lo){ p.q10=v; got=true; }
+      if (c>=hi){ p.q90=v; break; } }
+  });
+}
+function tick(){
+  runChunk(acc.n < 400 ? 200 : acc.n < 5000 ? 500 : 2000);
+  if (acc.n >= nextRender){
+    applyStats(); renderLive(); bar();
+    markI++;
+    nextRender = markI < MARKS.length ? MARKS[markI] : acc.n + 20000;
+  }
+  if (acc.n < CAP) simTimer = setTimeout(tick, 0);
+}
+// How old the pushed votes are, in minutes. The page can serve stale numbers
+// indefinitely if the push loop dies, and a quiet timestamp in a stats row is
+// easy to miss mid-broadcast, so past ten minutes it is called out in red.
+function staleMins(){
+  const t = Date.parse(M.updated_at.replace(' ', 'T'));
+  return isNaN(t) ? 0 : (Date.now() - t) / 60000;
+}
+function bar(){
+  const lead = L.reduce((a,b)=> b.read > (a?a.read:-1) ? b : a, null);
+  const fav = L.slice().sort((a,b)=>b.win-a.win)[0];
+  const done = S ? S.settled.size : M.matches_read;
+  $('livebar').innerHTML = [
+    ['<span class="dot"></span>Count', (S?S.status:M.status)==='LIVE' ? 'Live' : (S?S.status:M.status)],
+    ['Matches read', done+' / '+MT.length],
+    ['Votes read', S ? S.votes : M.votes_read],
+    ['Leading the count', lead ? lead.n+' ('+lead.read+')' : '–'],
+    ['Model favourite', fav ? fav.n+' '+pct(fav.win)+'%' : '–'],
+    ['Counts simulated', acc ? acc.n.toLocaleString() : '–'],
+    ['Feed', feedNote, staleMins() > 10],
+  ].map(([k,v,warn]) => `<div><span>${k}</span><b${warn?' class="warn"':''}>${v}</b></div>`).join('');
+}
+const byPi = []; L.forEach(p => byPi[p.pi] = p);
+async function refresh(){
+  try {
+    const next = await pullVotes();
+    const moved = !S || next.votes !== S.votes;
+    S = next;
+    feedNote = 'live, ' + S.at.toTimeString().slice(0,5);
+    if (moved) { resetSim(); applyVotes(); renderLive(); } else { bar(); }
+  } catch (e) {
+    // api.afl.com.au answers curl from any origin but 503s a real browser
+    // request, so this path is the normal one: the votes baked in at build time
+    // are used instead, and the page reloads periodically to pick up newer ones.
+    // Log the error anyway — this catch cannot tell the expected 503 from a
+    // genuine bug in pullVotes (a feed shape change, an unmapped team name), and
+    // during a live count those must not look identical to anyone debugging.
+    console.error('[live] feed fetch failed, falling back to pushed votes:', e);
+    feedNote = 'pushed ' + M.updated_at.slice(11);
+    if (!S) { S = fromBaked(); resetSim(); applyVotes(); renderLive(); }
+    bar();
+  }
+}
+function fromBaked(){
+  const read = new Int32Array(NP), cell = new Int8Array(NP*NR).fill(-1), settled = new Set();
+  L.forEach(p => { read[p.pi] = p.read;
+    p.av.forEach((v,ri) => { if (v != null){ cell[p.pi*NR+ri] = v;
+      const mi = mByRT.get(R[ri]+'|'+p.t); if (mi != null) settled.add(mi); } }); });
+  return {read, cell, settled, votes:M.votes_read, lost:M.unmatched_votes,
+          lastRound:M.last_round, status:M.status, at:new Date()};
+}
+bar(); refresh(); setInterval(refresh, 30000);
+if (M.status === 'LIVE') setTimeout(() => location.reload(), 150000);
+
+const lcols = [
+  {k:'rank', label:'#', num:true},
+  {k:'n', label:'Player', num:false},
+  {k:'t', label:'Team', num:false, cls:'t'},
+  {k:'read', label:'Votes', num:true, cls:'tot'},
+  {k:'xpd', label:'Expected', num:true, fmt:v=>v.toFixed(1)},
+  {k:'proj', label:'Proj', num:true, cls:'tot', fmt:(v,p)=>v.toFixed(1)+' ±'+p.sd.toFixed(0)},
+  {k:'init', label:'Pre-count', num:true, fmt:v=>v==null?'–':v.toFixed(1)},
+  {k:'q10', label:'10–90', num:true, fmt:(v,p)=>v+'–'+p.q90},
+  {k:'gl', label:'Games left', num:true},
+  {k:'xvl', label:'Exp left', num:true, fmt:v=>v.toFixed(1)},
+  {k:'win', label:'Win %', num:true, fmt:pct},
+  {k:'dwin', label:'Δ Win %', num:true, fmt:v=>(v>0?'+':'')+v.toFixed(1), sign:true},
+  {k:'top3', label:'Top3 %', num:true, fmt:pct},
+  {k:'top5', label:'Top5 %', num:true, fmt:pct},
+  {k:'top10', label:'Top10 %', num:true, fmt:pct},
+  {k:'top20', label:'Top20 %', num:true, fmt:pct},
+  {k:'over', label:'v model', num:true, fmt:v=>(v>0?'+':'')+v.toFixed(1), sign:true},
+];
+const STICK = 6;   // #, Player, Team, Votes, Expected, Proj stay put when scrolling
+// Expected votes over the matches ALREADY read, so it sits alongside the votes
+// banked on the same basis: the gap between the two is what "v model" reports.
+function scoreToDate(p){
+  let done = 0, left = 0;
+  for (let i=0;i<p.av.length;i++){
+    const x = p.gxv[i]; if (x == null) continue;      // bye or did not play
+    if (p.av[i] != null) done += x; else left += x;
+  }
+  p.xpd = done; p.xvl = left; p.over = p.read - done;
+}
+L.forEach(scoreToDate);
+L.forEach((p,i) => p.rank = i+1);
+let lsort = {k:'read', asc:false, round:null};
+function renderLive(){
+  const q=$('lq').value.trim().toLowerCase(), team=$('lteam').value, n=parseInt($('ltop').value,10);
+  const rows = L.filter(p => (!q || p.n.toLowerCase().includes(q)) && (!team || p.t===team));
+  // A round column sorts on what the model EXPECTED in that round, not what was
+  // polled: for a round still to be read there is no actual, and that is exactly
+  // when you want to know who the model likes in it.
+  const lkey = p => lsort.round!=null ? (p.gxv[lsort.round] ?? -1) : p[lsort.k];
+  rows.sort((a,b)=>{ const x=lkey(a), y=lkey(b); const c=(typeof x==='string')? x.localeCompare(y) : x-y;
+    return (lsort.asc? c : -c) || (b.proj - a.proj); });
+  const tr=document.createElement('tr');
+  lcols.forEach(c => { const th=document.createElement('th'); th.textContent=c.label; if (lsort.k===c.k && lsort.round==null) th.className='sorted'+(lsort.asc?' asc':'');
+    th.addEventListener('click', ()=>{ if (lsort.k===c.k && lsort.round==null) lsort.asc=!lsort.asc; else lsort={k:c.k, asc:!c.num, round:null}; renderLive(); }); tr.appendChild(th); });
+  R.forEach((rd,i) => { const th=document.createElement('th'); th.textContent = rd===0?'OR':rd; th.title = rd===0?'Opening Round':'Round '+rd;
+    if (lsort.round===i) th.className='sorted'+(lsort.asc?' asc':'');
+    th.addEventListener('click', ()=>{ if (lsort.round===i) lsort.asc=!lsort.asc; else lsort={k:null, asc:false, round:i}; renderLive(); }); tr.appendChild(th); });
+  const th=$('ltbl').tHead; th.innerHTML=''; th.appendChild(tr);
+  const tb=$('ltbl').tBodies[0]; const frag=document.createDocumentFragment();
+  rows.forEach((p,i) => p.rank = i+1);
+  rows.slice(0,n).forEach(p => { const r=document.createElement('tr');
+    lcols.forEach(c => { const td=document.createElement('td'); const v=p[c.k]; td.textContent = c.fmt? c.fmt(v,p) : v;
+      if (c.cls) td.className=c.cls; if (c.sign && v!==0) td.className = v>0?'pos':'neg'; r.appendChild(td); });
+    R.forEach((rd,i) => { const td=document.createElement('td'); const a=p.av[i], x=p.gxv[i];
+      if (x==null) { td.className='r bye'; r.appendChild(td); return; }
+      td.className = 'g' + (a==null ? ' open' : a===0 ? ' nil' : a>=2 ? ' dark' : ' lit');
+      if (a>0) td.style = heat(a);
+      td.innerHTML = `<b>${a==null?'·':a}</b><i>${x.toFixed(1)}</i>`;
+      td.title = a==null ? `R${rd}: not read yet — model expects ${x.toFixed(2)}`
+                         : `R${rd}: polled ${a}, model expected ${x.toFixed(2)}`;
+      r.appendChild(td); });
+    frag.appendChild(r); });
+  tb.innerHTML=''; tb.appendChild(frag);
+  stickCols();
+  $('lcount').textContent = rows.length + ' players' + (rows.length>n ? ' (showing '+n+')' : '');
+}
+function stickCols(){
+  const t = $('ltbl'), hs = t.tHead.rows[0].cells;
+  const offs = []; let off = 0;
+  for (let i=0;i<STICK;i++){ offs.push(off); off += hs[i].getBoundingClientRect().width; }
+  const pin = (c,i) => { c.classList.add('stick'); if (i===STICK-1) c.classList.add('stickend');
+                         c.style.left = offs[i]+'px'; };
+  for (let i=0;i<STICK;i++) pin(hs[i], i);
+  for (const r of t.tBodies[0].rows) for (let i=0;i<STICK;i++) pin(r.cells[i], i);
+}
+['lq','lteam','ltop'].forEach(id => $(id).addEventListener('input', renderLive));
+renderLive();
 })();
 </script>

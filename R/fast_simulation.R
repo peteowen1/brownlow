@@ -83,6 +83,64 @@ simulate_seasons_fast <- function(prepared, n_sims = 2000, seed = 1,
   totals
 }
 
+#' Simulate Every Count at Once, One Match at a Time
+#'
+#' `simulate_seasons_fast()` loops over simulations and, inside that, over
+#' matches — so a 5,000-count season is 5,000 x 207 calls to
+#' `simulate_match_votes_pl()`, each doing three `sample.int()` draws.
+#'
+#' The loop over simulations is unnecessary. Plackett-Luce has an exact
+#' vectorised form: give player i an exponential clock E_i / w_i and the order
+#' in which the clocks fire is a Plackett-Luce ordering of the field. So one
+#' match's 5,000 counts are one `rexp()` matrix and three `max.col()` calls, and
+#' the whole season becomes a loop over matches only — about 600 vectorised
+#' operations instead of a million scalar ones.
+#'
+#' Measured head-to-head on the 2026 season by
+#' `analysis/benchmark_vectorised_sampler.R`, written to
+#' `analysis/harness/vectorised_sampler_timing.csv`: **37x** — 7.6 s against
+#' 0.2 s for 200 counts, which scales to roughly 190 s against 5 s for the
+#' 5,000 a live re-simulation needs. An earlier draft of this comment claimed
+#' ~100x from an interactive timing that was never saved; it was wrong by a
+#' factor of three, which is why the benchmark is now committed.
+#'
+#' `analysis/validate_vectorised_sampler.R` checks the two samplers agree on
+#' P(3), P(2) and P(1) per player over 20,000 draws of a real match.
+#'
+#' @param prepared Output of `prepare_season_sim()`
+#' @param n_sims Number of season simulations
+#' @param seed RNG seed
+#' @param beta Sharpness applied to the Plackett-Luce worth vector
+#'
+#' @return Integer matrix of season vote totals, one row per unique player
+#'   (named), one column per simulation
+#' @export
+simulate_counts_vectorised <- function(prepared, n_sims = 5000, seed = 1, beta = 1) {
+  set.seed(seed)
+  keys <- unique(prepared$player_key)
+  gid <- match(prepared$player_key, keys)
+  worth <- pmax(prepared$P[, 4], 1e-12)^beta
+
+  nk <- length(keys)
+  totals <- matrix(0L, nk, n_sims, dimnames = list(keys, NULL))
+  col_base <- (seq_len(n_sims) - 1L) * nk
+  rows <- seq_len(n_sims)
+
+  for (ii in prepared$match_idx) {
+    n <- length(ii)
+    if (n < 3) stop(sprintf("Match has %d players; need at least 3 to allocate 3-2-1.", n))
+    clock <- matrix(stats::rexp(n_sims * n), n_sims, n) / rep(worth[ii], each = n_sims)
+    g <- gid[ii]
+    for (v in c(3L, 2L, 1L)) {
+      pick <- max.col(-clock, ties.method = "first")
+      clock[cbind(rows, pick)] <- Inf
+      at <- col_base + g[pick]
+      totals[at] <- totals[at] + v
+    }
+  }
+  totals
+}
+
 #' Draw One Match's 3-2-1 Votes by Sequential Plackett-Luce
 #'
 #' The existing `simulate_match_votes()` allocates the 3 votes by sampling from

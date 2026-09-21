@@ -1,0 +1,2 @@
+n_sims,matches,rows,loop_secs,vectorised_secs,speedup,loop_secs_per_5000,vectorised_secs_per_5000,measured_at
+200,207,9522,7.6,0.2,37.2,190,5.1,2026-09-21 23:51:36

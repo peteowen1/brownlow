@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Brownlow Vote Tracker</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
@@ -30,8 +31,8 @@ h1{font-size:22px;font-weight:600;margin:0 0 2px;letter-spacing:-.01em}
 .wrap{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
 table{border-collapse:collapse;font-variant-numeric:tabular-nums;white-space:nowrap}
 #tbl{min-width:100%}
-#btbl td:first-child,#btbl th:first-child{max-width:260px;overflow:hidden;text-overflow:ellipsis}
-#btbl td:nth-child(2){text-align:left}
+#btbl td:first-child,#btbl th:first-child{max-width:230px;overflow:hidden;text-overflow:ellipsis}
+#btbl td:nth-child(2),#btbl th:nth-child(2){text-align:left;white-space:normal;min-width:220px;max-width:420px}
 th,td{padding:4px 7px;border-bottom:1px solid var(--line);text-align:right;font-size:12.5px}
 th{position:sticky;top:0;background:var(--head);font-weight:500;cursor:pointer;user-select:none;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);z-index:2}
 th.sorted{color:var(--ink)}
@@ -48,19 +49,55 @@ td.pos{color:var(--good)} td.neg{color:var(--bad)}
 .legend{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--muted);margin:8px 0 0}
 .legend i{display:inline-block;width:38px;height:10px;border-radius:2px;background:linear-gradient(90deg,rgba(var(--heat),0),rgba(var(--heat),.85))}
 .count{font-size:12px;color:var(--muted);margin-left:auto;align-self:center}
+.livebar{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:baseline;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin-bottom:12px}
+.livebar b{font-size:17px;font-weight:600;display:block;font-variant-numeric:tabular-nums}
+.livebar span{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.livebar .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-right:5px;animation:pulse 1.6s infinite}
+.livebar b.warn{color:var(--bad)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.livebar .dot{animation:none}}
+#ltbl td.g{padding:2px 5px;text-align:center;min-width:36px}
+#ltbl td.g b{display:block;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;font-weight:600;line-height:1.2}
+#ltbl td.g i{display:block;font-style:normal;font-size:10px;line-height:1.15;color:var(--muted)}
+#ltbl td.g.nil b{color:var(--muted);opacity:.5}
+#ltbl td.g.open b{color:transparent}
+/* the expected-votes figure sits on top of the shading, so it needs a colour
+   picked for that shade rather than the page's muted grey */
+#ltbl td.g.dark b{color:#fff}
+#ltbl td.g.dark i{color:#fff;opacity:.82}
+#ltbl td.g.lit i{color:var(--ink);opacity:.62}
+/* identity and projection columns stay put while the round grid scrolls; the
+   left offsets are measured and set in script, since the widths are not fixed */
+#ltbl th.stick,#ltbl td.stick{position:sticky;z-index:1;background:var(--panel)}
+#ltbl th.stick{z-index:4;background:var(--head)}
+#ltbl tbody tr:nth-child(even) td.stick{background:var(--row-alt)}
+#ltbl th.stickend,#ltbl td.stickend{border-right:2px solid var(--line);box-shadow:4px 0 7px -4px rgba(0,0,0,.35)}
 [hidden]{display:none!important}
 @media (max-width:600px){ .controls input,.controls select{min-width:90px} }
 </style>
 
 <h1>Brownlow Vote Tracker</h1>
-<p class="sub">2026 InTheGame model: expected votes per player per round (the model's probability-weighted 0/1/2/3 for that match), season totals from 5,000 simulated counts, and the Sportsbet lines the model rates as value.</p>
+<p class="sub">2026 InTheGame model, live through the count: votes as they are read out against what the model expected, the season re-simulated continuously over only the matches still unread, and the Sportsbet lines the model rates as value.</p>
 
 <div class="tabs" role="tablist">
-  <button role="tab" id="tab-rounds" aria-selected="true" aria-controls="panel-rounds">By round</button>
+  <button role="tab" id="tab-live" aria-selected="true" aria-controls="panel-live">Live count</button>
+  <button role="tab" id="tab-rounds" aria-selected="false" aria-controls="panel-rounds">By round</button>
   <button role="tab" id="tab-bets" aria-selected="false" aria-controls="panel-bets">Value bets</button>
 </div>
 
-<section id="panel-rounds" role="tabpanel">
+<section id="panel-live" role="tabpanel">
+  <div id="livebar" class="livebar"></div>
+  <div class="controls">
+    <label>Search<input id="lq" type="search" placeholder="player name"></label>
+    <label>Team<select id="lteam"><option value="">All teams</option></select></label>
+    <label>Show<select id="ltop"><option value="30">Top 30</option><option value="60">Top 60</option><option value="200">Top 200</option><option value="9999">Everyone</option></select></label>
+    <span class="count" id="lcount"></span>
+  </div>
+  <p class="note">Each round cell shows what the player actually polled (large, shaded) over what the model expected for that match (small). A dot means that match has not been read out yet; blank means a bye or a game not played. Votes = banked so far, a fact; Expected = what the model expected that player to poll over those same matches, so Votes minus Expected is the "v model" column. Games left and Exp left are the matches still to be read for that player and the votes the model expects from them, so Votes plus Exp left is roughly Proj. Clicking a round heading sorts on what the model expected in that round, not on what was polled, which is what you want for a round still to come. Proj = mean final total once the unread matches are re-simulated and added to those banked votes, and the count of simulations above says how many have gone into the numbers so far; 10-90 is the 10th to 90th percentile of that final total; Pre-count is what the model projected before a single vote was read. Win % is the chance of an outright win from here, higher is better; Δ Win % is the move since before the count; "v model" is votes polled minus votes expected over the rounds read so far, so positive means running hot. The page keeps re-running counts in the background so the numbers sharpen while you watch, and reloads every two and a half minutes to pick up the votes read out since.</p>
+  <div class="wrap"><table id="ltbl"><thead></thead><tbody></tbody></table></div>
+</section>
+
+<section id="panel-rounds" role="tabpanel" hidden>
   <div class="controls">
     <label>Search<input id="q" type="search" placeholder="player name"></label>
     <label>Team<select id="team"><option value="">All teams</option></select></label>
@@ -81,6 +118,8 @@ td.pos{color:var(--good)} td.neg{color:var(--bad)}
     <label>Search<input id="bq" type="search" placeholder="player / selection"></label>
     <label>Min model p %<input id="minp" type="number" value="0" min="0" max="100" step="5" style="min-width:70px"></label>
     <label>Max model p %<input id="maxp" type="number" value="100" min="0" max="100" step="5" style="min-width:70px"></label>
+    <label>Min odds<input id="minodds" type="number" value="1" min="1" step="0.1" style="min-width:70px"></label>
+    <label>Max odds<input id="maxodds" type="number" value="1000" min="1" step="1" style="min-width:70px"></label>
     <label>Min full-Kelly %<input id="mink" type="number" value="3" min="0" step="1" style="min-width:70px"></label>
     <label>Bankroll $<input id="bank" type="number" value="1000" min="0" step="50" style="min-width:90px"></label>
     <label>Kelly fraction<select id="kf"><option value="0.25">Quarter</option><option value="0.5">Half</option><option value="1">Full</option><option value="0.1">Tenth</option></select></label>

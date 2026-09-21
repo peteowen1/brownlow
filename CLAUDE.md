@@ -38,12 +38,21 @@ individual prediction," lowest wins. The FAQ adds "you should use a regression
 model, not a classification model."
 
 This file previously said to optimise multinomial probability calibration with
-priority `log-loss > ECE > Brier`. That was wrong about the competition, and it
-matters in one specific place: **model selection**. `optimal_nrounds()`
-early-stops on `validation_mlogloss` and `tune_xgboost_honest()` ranks
-candidates by mean fold mlogloss, so rounds and hyperparameters are still
-chosen on a metric the competition does not score. See POSTMORTEM-2025.md
-Sec 5k.
+priority `log-loss > ECE > Brier`. That was wrong about the competition. See
+POSTMORTEM-2025.md Sec 5k.
+
+**That gap is now closed, and measuring it settled the question** — see
+POSTMORTEM-2026.md Sec 3d, which cites each logged run separately rather than
+splicing them. `optimal_nrounds()` still *defaults* to `validation_mlogloss`,
+but the production round count was re-selected on `metric = "rmse_ipf"` and
+adopted 2026-09-02 via `analysis/adopt_rmse_rounds.R` (from 391 to the shipped
+1,000), and `tune_xgboost_honest()` re-run under RMSE chose **identical**
+hyperparameters.
+
+What was actually measured: round count 400 vs 1,200 is worth −0.00042, and the
+hyperparameter re-tune is worth exactly 0. Both inside the 0.00055 decidability
+bar. No run scored 391 against 1,000 directly. Do not re-open this as an
+improvement idea: it is done, and it was worth nothing.
 
 What to do:
 - **Report and compare on RMSE after IPF**, via `evaluate_seeds()`. Every
