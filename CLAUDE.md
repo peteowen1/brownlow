@@ -42,13 +42,17 @@ priority `log-loss > ECE > Brier`. That was wrong about the competition. See
 POSTMORTEM-2025.md Sec 5k.
 
 **That gap is now closed, and measuring it settled the question** — see
-POSTMORTEM-2026.md Sec 3d. `optimal_nrounds()` still *defaults* to
-`validation_mlogloss`, but the production round count was re-selected on
-`metric = "rmse_ipf"` (391 -> 1,000, adopted 2026-09-02 via
-`analysis/adopt_rmse_rounds.R`), and `tune_xgboost_honest()` re-run under RMSE
-chose **identical** hyperparameters. Both changes measured inside the 0.00055
-decidability bar. Do not re-open this as an improvement idea: it is done, and it
-was worth nothing.
+POSTMORTEM-2026.md Sec 3d, which cites each logged run separately rather than
+splicing them. `optimal_nrounds()` still *defaults* to `validation_mlogloss`,
+but the production round count was re-selected on `metric = "rmse_ipf"` and
+adopted 2026-09-02 via `analysis/adopt_rmse_rounds.R` (from 391 to the shipped
+1,000), and `tune_xgboost_honest()` re-run under RMSE chose **identical**
+hyperparameters.
+
+What was actually measured: round count 400 vs 1,200 is worth −0.00042, and the
+hyperparameter re-tune is worth exactly 0. Both inside the 0.00055 decidability
+bar. No run scored 391 against 1,000 directly. Do not re-open this as an
+improvement idea: it is done, and it was worth nothing.
 
 What to do:
 - **Report and compare on RMSE after IPF**, via `evaluate_seeds()`. Every

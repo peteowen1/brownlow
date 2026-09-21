@@ -145,13 +145,21 @@ already proven worthless. **The GAM refit was correctly skipped.**
 
 POSTMORTEM-2025 §5k flagged this and it was **acted on before the season**:
 
-| Axis | On mlogloss | On rmse_ipf | Effect (2025 holdout) |
-|---|---|---|---|
-| Round count | 391 | 1,100 | 0.35690 → 0.35648, **−0.00042** |
-| Hyperparameters | depth 4, eta 0.025, subsample 0.8, colsample 0.6 | **identical** | 0.35642 → 0.35642, **0** |
+Each row below is one logged run, cited separately, because they are **not** a
+single before/after measurement and an earlier draft of this table wrongly
+spliced three of them together:
 
-Both inside the 0.00055 bar. The 2026 submission shipped with
-`best_iteration = 1000`, already RMSE-selected.
+| Run | What it compared | Result |
+|---|---|---|
+| `rmse_sel.log` | round count, 400 (mlogloss argmin) vs 1,200 (rmse_ipf argmin) | 0.35690 → 0.35648, **−0.00042** |
+| `rmse_tune.log` | hyperparameters, mlogloss-tuned vs rmse_ipf-tuned, both held at 1,100 rounds | **identical parameters**, 0.35642 → 0.35642, **0** |
+| `honest_retune.log` | a separate question (expanding-window vs random k-fold tuning); source of the 391 figure | 0.35741 → 0.35700, −0.00042 |
+
+Both RMSE-selection results are inside the 0.00055 bar. The production round
+count before any of this was **391**; the 2026 submission shipped with
+`best_iteration = 1000`, adopted from a later run of `adopt_rmse_rounds.R` and
+never itself scored against 391 — see §4, which is also where the two adoption
+runs disagreeing came from.
 
 The round optimum is properly bracketed, not capped: the grid is
 `seq(100, 2500, by = 100)`, the RMSE argmin is 1200, the curve turns up after it
@@ -234,10 +242,14 @@ Smaller, concrete:
   page at build time instead, and the page reloads periodically.
 - `simulate_counts_vectorised()` (R/fast_simulation.R) replaces the per-sim loop
   with the exponential-race form of Plackett-Luce — give player *i* a clock
-  `E_i/w_i`, take the three that fire first. Same distribution, validated
-  against the sequential sampler to Monte Carlo noise. **A full season of 5,000
-  counts went from ~100 s to 5.9 s.** The artifact page runs the same trick in
-  JavaScript, so it re-simulates continuously in the browser.
+  `E_i/w_i`, take the three that fire first. Same distribution:
+  `analysis/validate_vectorised_sampler.R` compares both samplers over 20,000
+  draws of a real match and they agree to within 0.010 on every per-player
+  P(3)/P(2)/P(1), which is Monte Carlo noise at that sample size.
+  `analysis/benchmark_vectorised_sampler.R` measures the speedup at **37x** —
+  7.6 s against 0.2 s for 200 counts of the 2026 season, so roughly 190 s
+  against 5 s for the 5,000 a live re-simulation needs. The artifact page runs
+  the same trick in JavaScript, so it re-simulates continuously in the browser.
 - Only the *unread* matches are simulated; matches already read out are facts.
 - The in-count momentum tilt (`analysis/in_count_update_value.R`) is deliberately
   **not** applied: it made weighted top-20 log-loss worse in 6 of 9 seasons.

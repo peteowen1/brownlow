@@ -250,6 +250,13 @@ function tick(){
   }
   if (acc.n < CAP) simTimer = setTimeout(tick, 0);
 }
+// How old the pushed votes are, in minutes. The page can serve stale numbers
+// indefinitely if the push loop dies, and a quiet timestamp in a stats row is
+// easy to miss mid-broadcast, so past ten minutes it is called out in red.
+function staleMins(){
+  const t = Date.parse(M.updated_at.replace(' ', 'T'));
+  return isNaN(t) ? 0 : (Date.now() - t) / 60000;
+}
 function bar(){
   const lead = L.reduce((a,b)=> b.read > (a?a.read:-1) ? b : a, null);
   const fav = L.slice().sort((a,b)=>b.win-a.win)[0];
@@ -261,8 +268,8 @@ function bar(){
     ['Leading the count', lead ? lead.n+' ('+lead.read+')' : '–'],
     ['Model favourite', fav ? fav.n+' '+pct(fav.win)+'%' : '–'],
     ['Counts simulated', acc ? acc.n.toLocaleString() : '–'],
-    ['Feed', feedNote],
-  ].map(([k,v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('');
+    ['Feed', feedNote, staleMins() > 10],
+  ].map(([k,v,warn]) => `<div><span>${k}</span><b${warn?' class="warn"':''}>${v}</b></div>`).join('');
 }
 const byPi = []; L.forEach(p => byPi[p.pi] = p);
 async function refresh(){
@@ -276,6 +283,10 @@ async function refresh(){
     // api.afl.com.au answers curl from any origin but 503s a real browser
     // request, so this path is the normal one: the votes baked in at build time
     // are used instead, and the page reloads periodically to pick up newer ones.
+    // Log the error anyway — this catch cannot tell the expected 503 from a
+    // genuine bug in pullVotes (a feed shape change, an unmapped team name), and
+    // during a live count those must not look identical to anyone debugging.
+    console.error('[live] feed fetch failed, falling back to pushed votes:', e);
     feedNote = 'pushed ' + M.updated_at.slice(11);
     if (!S) { S = fromBaked(); resetSim(); applyVotes(); renderLive(); }
     bar();

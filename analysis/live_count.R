@@ -72,6 +72,13 @@ votes[, team := unname(TEAM[afl_team])]
 if (anyNA(votes$team)) stop("unmapped AFL team: ", paste(unique(votes[is.na(team), afl_team]), collapse = ", "))
 
 lookup <- unique(ep[, .(key, player_name, team, sq = squash(player_name))])
+# The merge below is on (sq, team), so two different players whose names squash
+# to the same string in the same team would each match the feed's single vote
+# row and DOUBLE that vote rather than drop it. Nothing downstream would notice:
+# the match would total 7 and only the 6-vote assertion would catch it, after
+# the fact. Assert the key is unique instead.
+stopifnot("two players share a squashed name within a team" =
+            !anyDuplicated(lookup[, .(sq, team)]))
 # The AFL feed disambiguates the two Bailey Williamses with a middle initial the
 # datathon data does not carry; team still separates them, so drop the initial.
 ALIAS <- c(baileyjwilliams = "baileywilliams", harrisonpetty = "harrypetty",
@@ -80,8 +87,18 @@ votes[, sq := squash(afl_name)]
 votes[sq %in% names(ALIAS), sq := unname(ALIAS[sq])]
 votes <- merge(votes, lookup[, .(sq, team, key)], by = c("sq","team"), all.x = TRUE)
 lost <- votes[is.na(key)]
+# STOP rather than carry on. A name the feed spells differently to the datathon
+# data silently subtracts that player's votes from their total and leaves their
+# match showing five, which is a published number that is wrong and looks
+# authoritative -- exactly what happened to Harrison/Harry Petty on count night.
+# Halting costs one refresh cycle and the page keeps serving its last correct
+# state, which is strictly better than replacing it with a wrong one. The fix is
+# always a one-line ALIAS entry, so the operator can clear it inside a cycle.
 if (nrow(lost)) {
-  cat("UNMATCHED PLAYERS (their votes are dropped):\n"); print(lost[, .(votes = sum(votes)), by = .(afl_name, afl_team)])
+  print(lost[, .(votes = sum(votes)), by = .(afl_name, afl_team)])
+  stop(sprintf(paste0("%d vote(s) from %d unmatched player(s) would be dropped. ",
+                      "Add the spelling(s) above to ALIAS and rerun."),
+               sum(lost$votes), uniqueN(lost$afl_name)))
 }
 
 # ---- which matches have been read out ----------------------------------------
@@ -90,8 +107,20 @@ played <- unique(ep[, .(match_id, match_round, team)])
 vm <- merge(votes[!is.na(key)], played, by.x = c("round","team"), by.y = c("match_round","team"), all.x = TRUE)
 stopifnot(!anyNA(vm$match_id))
 done <- vm[, .(read_votes = sum(votes)), by = match_id]
+# A match that does not total 6 has been read wrong, and there is no safe way to
+# carry on with it. Treating it as settled removes it from the simulation, so
+# the missing vote is never counted and never simulated. Putting it back into
+# `future` instead is WORSE, not better: `obs` below sums every matched vote
+# regardless of settled status, so the match would contribute its partial read
+# AND a fresh six-vote simulation -- eleven votes from a six-vote game. With the
+# unmatched-name stop above, the only remaining cause is a genuinely partial
+# feed mid-round, which the next refresh resolves on its own.
 odd <- done[read_votes != 6]
-if (nrow(odd)) { cat("matches not totalling 6 votes (partial read or a dropped name):\n"); print(odd) }
+if (nrow(odd)) {
+  print(odd)
+  stop(sprintf("%d match(es) above do not total 6 votes; refusing to publish a partial read.",
+               nrow(odd)))
+}
 settled <- done$match_id
 rounds_done <- sort(unique(ep[match_id %in% settled, match_round]))
 cat(sprintf("%d of %d matches read; rounds %s\n", length(settled), uniqueN(ep$match_id),

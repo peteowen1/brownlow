@@ -22,6 +22,13 @@ players <- lapply(seq_len(nrow(w)), function(i) {
 stopifnot(nrow(k) > 0, length(players) == 668)
 lv <- fread("results/markets/live_state.csv")
 g  <- fread("results/markets/live_grid.csv")
+# Assert coverage, not presence. Every check below reads clean on a zero-row
+# table -- anyNA() of nothing is FALSE and all() of nothing is TRUE -- so a
+# live_count.R run that died partway would publish an empty live tab with all
+# its assertions passing.
+stopifnot("live_state.csv is empty" = nrow(lv) > 0,
+          "live_grid.csv is empty" = nrow(g) > 0,
+          "live_state.csv is missing players" = nrow(lv) == length(players))
 gav <- dcast(g, pkey ~ round, value.var = "votes")
 gxv <- dcast(g, pkey ~ round, value.var = "xv")
 rc <- as.character(rounds)
