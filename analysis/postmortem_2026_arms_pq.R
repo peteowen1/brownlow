@@ -135,5 +135,8 @@ print(scr[, .(candidate, adj_r2_base = round(adj_r2_base, 5),
               partial_cor = round(partial_cor, 4))])
 cat(sprintf("\nfor scale: an effect of spread s removes about s^2/(2*sigma^2) of RMSE, sigma = %.4f\n",
             rmse(base$ensemble_expected_votes, base$actual)))
-fwrite(pw, "results/markets/whatif_position_sweep.csv")
-cat("written: results/markets/whatif_position_sweep.csv\n")
+# analysis/harness/ is committed; results/ is gitignored, so a table quoted in
+# POSTMORTEM-2026.md has to land here to be checkable by a reader.
+fwrite(pw, "analysis/harness/whatif_position_arms.csv")
+fwrite(scr, "analysis/harness/whatif_player_effect_screen.csv")
+cat("written: analysis/harness/whatif_{position_arms,player_effect_screen}.csv\n")

@@ -91,5 +91,7 @@ res[, rank := .I]
 cat("\n=== RMSE on the matches read so far. Lower is better; this is the datathon's own metric,\n")
 cat("    averaged over every player-match row in those matches, most of which polled nothing. ===\n")
 print(res[, .(rank, model, rmse = round(rmse, 5), mae = round(mae, 5))], nrow = 40)
-fwrite(res, "results/markets/live_rmse.csv")
-cat("\nwritten: results/markets/live_rmse.csv\n")
+# analysis/harness/ is committed; results/ is gitignored, and this table is the
+# leaderboard POSTMORTEM-2026.md Sec 1 quotes.
+fwrite(res, "analysis/harness/live_rmse.csv")
+cat("\nwritten: analysis/harness/live_rmse.csv\n")

@@ -97,6 +97,14 @@ sw <- rbindlist(lapply(BETAS, function(b) {
      .SDcols = c(PC, "match_id", "grp")][, beta := b] }))
 w26 <- sw[season == 2026][order(rmse)]
 prior <- sw[season < 2026, .(rmse = mean(rmse)), by = beta][order(rmse)]
+# Persist arm S the moment it exists, not at the end of the script. The first
+# run of this file was killed by the low-memory reaper DURING arm P, after arm S
+# had finished -- and because both writes sat at the bottom, nine minutes of
+# completed work went in the bin and had to be recovered from a partial stdout
+# log. Interruptions are routine on this machine, so a long run that writes once
+# is a defect regardless of whether the arithmetic is right.
+fwrite(sw, "analysis/harness/whatif_sharpen_sweep.csv")
+cat("arm S written to analysis/harness/whatif_sharpen_sweep.csv\n")
 cat("\n=== arm S: sharpening power. RMSE on 2026, lower is better ===\n")
 print(dcast(sw[season %in% c(2023, 2024, 2025, 2026)], beta ~ season,
             value.var = "rmse")[, lapply(.SD, function(x) round(x, 5))])
@@ -141,5 +149,8 @@ cat("NOTE: our rows here are scored on all 9,522 2026 rows, the sheet's on the 9
 cat("so the placings are indicative. Lower RMSE is better.\n")
 comb <- rbind(board[!model %in% c("InTheGame")], arms)[order(rmse)][, rank := .I]
 print(comb[rank <= 12 | grepl("ours", model), .(rank, model, rmse = round(rmse, 5))], nrow = 30)
-fwrite(sw, "results/markets/whatif_sharpen_sweep.csv")
-cat("\nwritten: results/markets/whatif_sharpen_sweep.csv\n")
+# analysis/harness/ is committed; results/ is gitignored. The tables quoted in
+# POSTMORTEM-2026.md have to live somewhere a reader can check them against.
+fwrite(sw, "analysis/harness/whatif_sharpen_sweep.csv")
+fwrite(pw, "analysis/harness/whatif_position_sweep.csv")
+cat("\nwritten: analysis/harness/whatif_{sharpen,position}_sweep.csv\n")
