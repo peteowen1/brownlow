@@ -3,6 +3,22 @@
 This file starts at 0.2.0. Earlier versions are documented in the commit
 history and in `POSTMORTEM-2025.md`.
 
+# brownlow 0.2.12
+
+* `analysis/ensemble_diversity_2026.R` measures the ensemble-diversity lever
+  that POSTMORTEM-2026.md §5 had left as a hypothesis. It is worth roughly
+  fifteen times all four theories in §3 combined.
+
+* The finding: on 2026, the only season the model never saw, our XGBoost and GAM
+  members have an error correlation of 0.975, so the blend beats its own better
+  member by just 0.00129. A second member of the same quality at correlation
+  0.73 would put us level with the best entrant. §5 now recommends building a
+  decorrelated member rather than another feature or calibration knob.
+
+* The blend arithmetic uses the general two-variance form
+  `MSE = (s1² + s2² + 2ρ·s1·s2)/4`. Using the better member's sd for both, as a
+  first draft did, is optimistic by about the decidability bar.
+
 # brownlow 0.2.11
 
 * The post-mortem's leaderboard, sharpening-sweep and defender-sweep tables now

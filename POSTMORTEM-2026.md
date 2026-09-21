@@ -226,12 +226,70 @@ question, not an accuracy one.
 the gap. The remaining 91% is **discrimination** — picking the right player more
 often — and no post-hoc transform on the existing probability matrix can buy it.
 
-The one empirical clue is in §1: **`consensus`, the plain average of 22
-entrants, beat every individual model.** Our ensemble is two correlated members
-(XGBoost + GAM on shared features). Widening it across genuinely different model
-families is the only mechanism this dataset demonstrates adds discrimination.
-That is a hypothesis and deserves a real walk-forward test, not adoption on
-reasoning.
+The one empirical clue was in §1: **`consensus`, the plain average of 22
+entrants, beat every individual model.** That has now been measured
+(`analysis/ensemble_diversity_2026.R`) and it is the largest lever found by a
+wide margin.
+
+For squared error the ambiguity decomposition is exact:
+
+```
+MSE(ensemble) = mean_i MSE(member_i)  -  mean_i E[(member_i - ensemble)^2]
+                \_ average quality _/     \_____ diversity _____/
+```
+
+so an equal-weight ensemble is *always* at least as good as its average member,
+and its entire advantage is the spread between members. "Is another model worth
+adding" is therefore a question about **decorrelation**, not about how good the
+new model is on its own.
+
+**Our ensemble has almost no diversity to spend.** On 2026, the only season the
+model never saw, XGBoost and GAM have an error correlation of **0.975**, and the
+blend beats its own better member by just **+0.00129**.
+
+For two members with error sds `s1`, `s2` and error correlation ρ, the
+equal-weight blend has `MSE = (s1² + s2² + 2ρ·s1·s2)/4`, which collapses to
+`RMSE_member × sqrt((1+ρ)/2)` when the two are equally good. Checked at both
+points where the answer is actually known:
+
+| Pair | Predicted | Measured |
+|---|---|---|
+| ours + `bg1` (ρ 0.820) | 0.28062 | 0.28063 |
+| our own XGBoost + GAM (ρ 0.975) | 0.29141 | 0.29140 |
+
+Using the *better* member's sd for both — as an earlier draft did — makes the
+formula optimistic by roughly the size of the decidability bar. The general form
+above does not have that bias, which is why the table below can be read as
+arithmetic rather than as an estimate:
+
+| Error correlation | Blend RMSE | Gain |
+|---|---|---|
+| **0.975 (ours today)** | 0.29085 | +0.00184 |
+| 0.900 | 0.28528 | +0.00741 |
+| 0.820 | 0.27921 | +0.01348 |
+| **0.730** | **0.27222** | **+0.02047** |
+
+**A second member of our current quality at ρ ≈ 0.73 would put us level with the
+best entrant.** Measured against real partners: blending 50/50 with `bg1`
+(RMSE 0.29368, barely better than ours) gains **+0.01404** — fifteen times
+everything in §3 combined.
+
+Two things that cut against a naive reading:
+
+- **Diversity alone is not enough.** The two members most decorrelated from us,
+  `hs` (ρ 0.588) and `afl` (ρ 0.635), are weak enough that adding them makes the
+  blend *worse* — by −0.00497 and **−0.01273**, the latter larger than anything
+  §3 could win. Quality and decorrelation both have to be there.
+- **This is one season, and ρ = 0.73 is an extrapolation.** The formula is exact
+  and validated at ρ = 0.820 and ρ = 0.975, but there is no validation point
+  anywhere near 0.73 with a good-quality partner — the only low-ρ entrants on
+  hand are the two weak ones above. ρ = 0.975 between our own members is also
+  measured on 2026 alone. Confirm both on a held-out season before committing to
+  a build.
+
+So the 2027 programme is not another feature or another calibration knob. It is
+**a second member that is wrong in different places** — a different model class
+on different inputs, chosen to decorrelate rather than to score well alone.
 
 Smaller, concrete:
 
