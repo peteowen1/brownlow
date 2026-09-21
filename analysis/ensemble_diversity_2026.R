@@ -153,14 +153,17 @@ curve[, gain := curve$rmse[1] - rmse]
 print(curve[members %in% c(1,2,3,4,5,6,8,10,15,22), .(members, rmse = round(rmse, 5),
                                                       gain = round(gain, 5))])
 # ---- 6. the target, in closed form -------------------------------------------
-# For two members of equal error variance with error correlation rho, the
-# equal-weight blend has MSE = sigma^2 (1 + rho) / 2, so
-#     RMSE_blend = RMSE_member * sqrt((1 + rho) / 2).
-# That turns "how decorrelated does a second member need to be" into arithmetic
-# rather than a search, and it is worth checking the formula against the
-# measured pairs above before trusting it.
+# For two members with error sds s1 and s2 and error correlation rho, the
+# equal-weight blend has
+#     MSE = (s1^2 + s2^2 + 2 rho s1 s2) / 4.
+# When the two are equally good this collapses to the tidier
+# s * sqrt((1 + rho) / 2), but they rarely are, and using the BETTER member's sd
+# for both makes the formula optimistic by about the size of the decidability
+# bar -- which is exactly the error an earlier draft of this script made. Keep
+# the general form and let the equal-quality case fall out of it.
+blend_rmse_at <- function(s1, s2, rho) sqrt((s1^2 + s2^2 + 2 * rho * s1 * s2) / 4)
 best_own <- own[season == 2026, pmin(xgb_rmse, gam_rmse)]
-pred_blend <- function(rho) best_own * sqrt((1 + rho) / 2)
+pred_blend <- function(rho) blend_rmse_at(best_own, best_own, rho)
 cat("\n=== 6. how decorrelated would a second member have to be? ===\n")
 cat("Predicted blend RMSE for a second member as good as our best one, at each\n")
 cat("error correlation. Lower is better. Ours today sit at 0.975.\n")
@@ -168,15 +171,31 @@ tgt <- data.table(rho = c(0.975, 0.94, 0.90, 0.85, 0.82, 0.75, 0.73, 0.70))
 tgt[, `:=`(predicted_rmse = round(pred_blend(rho), 5),
            gain = round(best_own - pred_blend(rho), 5))]
 print(tgt)
+# Check the general form at BOTH points where a real answer exists, using each
+# pair's own sds rather than a single assumed one. Two checks, not one, and they
+# span the regime the target table extrapolates from.
+ours_rmse <- rmse(d[[ours]])
 chk <- blend[partner == "bg1"]
-cat(sprintf("\nformula check against a real pair: bg1 (err_cor %.3f, RMSE %.5f)\n",
-            chk$err_cor, chk$partner_rmse))
-cat(sprintf("  predicted %.5f, actually measured %.5f\n",
-            pred_blend(chk$err_cor), chk$blend_rmse))
-rho_star <- 2 * (min(blend$blend_rmse[blend$partner == "jt"], 0.27246) / best_own)^2 - 1
-cat(sprintf("\nto reach the best entrant's %.5f we would need rho of about %.2f,\n",
-            0.27246, rho_star))
-cat("against the 0.975 our XGBoost and GAM have today.\n")
+own26 <- own[season == 2026]
+cat("\nformula checked against every pair where the answer is known:\n")
+print(data.table(
+  pair = c("ours + bg1 (rho 0.820)", "our own XGBoost + GAM (rho 0.975)"),
+  predicted = round(c(blend_rmse_at(ours_rmse, chk$partner_rmse, chk$err_cor),
+                      blend_rmse_at(own26$xgb_rmse, own26$gam_rmse, own26$err_cor)), 5),
+  measured = round(c(chk$blend_rmse, own26$ens_rmse), 5)))
+
+# Invert the equal-quality case for a partner as good as our best member. The
+# target is the best entrant's actual RMSE, a constant read off Sec 1 -- an
+# earlier draft wrapped this in a min() against our measured jt blend, which can
+# never be the smaller of the two and only made the line look like it was
+# comparing something.
+BEST_ENTRANT <- 0.27246
+rho_star <- 2 * (BEST_ENTRANT / best_own)^2 - 1
+cat(sprintf("\nto reach the best entrant's %.5f, a second member as good as our best\n",
+            BEST_ENTRANT))
+cat(sprintf("would need rho of about %.2f, against the %.3f our XGBoost and GAM\n",
+            rho_star, own26$err_cor))
+cat("have today.\n")
 fwrite(tgt, "analysis/harness/ensemble_diversity_target.csv")
 fwrite(blend, "analysis/harness/ensemble_diversity_pairs.csv")
 fwrite(curve, "analysis/harness/ensemble_diversity_curve.csv")

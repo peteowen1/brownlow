@@ -247,10 +247,20 @@ new model is on its own.
 model never saw, XGBoost and GAM have an error correlation of **0.975**, and the
 blend beats its own better member by just **+0.00129**.
 
-For two members of equal error variance and error correlation ρ,
-`RMSE_blend = RMSE_member × sqrt((1+ρ)/2)`. Checked against a real pair — `bg1`,
-error correlation 0.820 — it predicts 0.27921 against 0.28063 measured, so the
-arithmetic is trustworthy:
+For two members with error sds `s1`, `s2` and error correlation ρ, the
+equal-weight blend has `MSE = (s1² + s2² + 2ρ·s1·s2)/4`, which collapses to
+`RMSE_member × sqrt((1+ρ)/2)` when the two are equally good. Checked at both
+points where the answer is actually known:
+
+| Pair | Predicted | Measured |
+|---|---|---|
+| ours + `bg1` (ρ 0.820) | 0.28062 | 0.28063 |
+| our own XGBoost + GAM (ρ 0.975) | 0.29141 | 0.29140 |
+
+Using the *better* member's sd for both — as an earlier draft did — makes the
+formula optimistic by roughly the size of the decidability bar. The general form
+above does not have that bias, which is why the table below can be read as
+arithmetic rather than as an estimate:
 
 | Error correlation | Blend RMSE | Gain |
 |---|---|---|
@@ -268,12 +278,14 @@ Two things that cut against a naive reading:
 
 - **Diversity alone is not enough.** The two members most decorrelated from us,
   `hs` (ρ 0.588) and `afl` (ρ 0.635), are weak enough that adding them makes the
-  blend *worse* (−0.005 and −0.003). Quality and decorrelation both have to be
-  there.
-- **This is one season.** The mechanism is exact arithmetic rather than a fitted
-  parameter, which is why it is quoted with confidence, but ρ = 0.975 between
-  our own members is measured on 2026 alone. Confirm it holds on a held-out
-  season before committing to a build.
+  blend *worse* — by −0.00497 and **−0.01273**, the latter larger than anything
+  §3 could win. Quality and decorrelation both have to be there.
+- **This is one season, and ρ = 0.73 is an extrapolation.** The formula is exact
+  and validated at ρ = 0.820 and ρ = 0.975, but there is no validation point
+  anywhere near 0.73 with a good-quality partner — the only low-ρ entrants on
+  hand are the two weak ones above. ρ = 0.975 between our own members is also
+  measured on 2026 alone. Confirm both on a held-out season before committing to
+  a build.
 
 So the 2027 programme is not another feature or another calibration knob. It is
 **a second member that is wrong in different places** — a different model class
