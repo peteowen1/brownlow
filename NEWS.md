@@ -3,6 +3,19 @@
 This file starts at 0.2.0. Earlier versions are documented in the commit
 history and in `POSTMORTEM-2025.md`.
 
+# brownlow 0.2.13
+
+* Post-count handover. `RUNBOOK.md` opens with current state instead of two
+  pre-count "start here" sections; `SIMS-PLAN.md` §1 (in-count momentum) is
+  closed as built, measured worse in 6 of 9 seasons, and deliberately off.
+
+* The 0.975 error correlation between our two ensemble members now writes to
+  `analysis/harness/ensemble_own_members.csv` rather than only being printed.
+
+* The match-relative composites decision (POSTMORTEM-2025 §5o) was rescued from
+  a superseded section and added to POSTMORTEM-2026 §5's queue. 2026 is now a
+  clean out-of-sample season, which is the evidence that call originally lacked.
+
 # brownlow 0.2.12
 
 * `analysis/ensemble_diversity_2026.R` measures the ensemble-diversity lever
