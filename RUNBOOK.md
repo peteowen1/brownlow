@@ -31,6 +31,15 @@ curl from any origin**, so the page cannot fetch it itself.
 through the count, the only replay of a live count we have. It is gitignored and
 exists on this machine only. Worth a piggyback release before it is lost.
 
+**One open decision carried over, and it is now cheap to settle.** The
+match-relative composites (POSTMORTEM-2025 §5o) were adopted on reasoning rather
+than evidence — end-to-end gain 0.00010 against the 0.00041 the harness
+suggested — and kept on a 2026 shift-robustness argument. That argument can now
+be checked: 2026 is a clean out-of-sample season with real votes, which did not
+exist when the decision was made. Reverting is one line in `02` plus a chain
+rerun. The full note is under the superseded section below; it is repeated here
+so it is not lost, since everything else down there is genuinely finished.
+
 ## 21 September (count night) — pre-count reference
 
 - **Submission SENT 20 Sep** (Pete emailed the CSV to datathon@betfair.com.au; MS To-Do item closed). Nothing further to do for the datathon until results.

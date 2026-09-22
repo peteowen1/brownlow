@@ -305,6 +305,11 @@ Smaller, concrete:
 3. **`2025-03-29_Brisbane_Geelong` has no votes in the datathon file.** A match
    scored as all-zeros silently rewards whichever model predicts least. Chase it
    before it contaminates a 2027 fit.
+4. **Settle the match-relative composites** (POSTMORTEM-2025 §5o). They were
+   adopted on reasoning rather than evidence — 0.00010 end-to-end against the
+   0.00041 the harness suggested — and kept on a shift-robustness argument that
+   2026 can now actually test, which it could not when the call was made.
+   Reverting is one line in `02` plus a chain rerun.
 
 ---
 
