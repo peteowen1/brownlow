@@ -10,24 +10,31 @@ All 207 matches, 1,242 votes.
 
 ## 1. How we did
 
-Entered as **InTheGame**. Final RMSE **0.29467**, **7th of 23** in the community
+Entered as **InTheGame**. Final RMSE **0.29182**, **7th of 23** in the community
 comparison sheet (see `analysis/live_rmse.R` for the scorer, and the memory note
 `brownlow-predictions-sheet` for the sheet's quirks).
 
 | Rank | Model | RMSE | MAE |
 |---|---|---|---|
-| 1 | consensus *(mean of all entrants, not a competitor)* | 0.27195 | 0.07717 |
-| 2 | jt | 0.27246 | 0.08143 |
-| 3 | qp | 0.27688 | 0.08985 |
-| 4 | wheelo | 0.28934 | 0.08631 |
-| 5 | bg2 | 0.29112 | 0.06999 |
-| 6 | bg1 | 0.29368 | 0.06964 |
-| **7** | **InTheGame** | **0.29467** | 0.09290 |
+| 1 | consensus *(mean of all entrants, not a competitor)* | 0.26951 | 0.07591 |
+| 2 | jt | 0.26988 | 0.08005 |
+| 3 | qp | 0.27433 | 0.08840 |
+| 4 | wheelo | 0.28649 | 0.08482 |
+| 5 | bg2 | 0.28871 | 0.06888 |
+| 6 | bg1 | 0.29108 | 0.06849 |
+| **7** | **InTheGame** | **0.29182** | 0.09137 |
 | … | | | |
-| 23 | afl | 0.38401 | 0.08676 |
+| 23 | afl | 0.38116 | 0.08545 |
 
-Scored on the 9,094 rows every entrant filled in. Our MAE rank (19th of 23) is
-far worse than our RMSE rank, which is the first clue to §2.
+Scored on the 9,292 rows every entrant filled in, and our own entry now joins on
+**all 9,522**. An earlier version of this table read 0.29467 on 9,094 rows,
+because 207 of ours (2.2%) failed to join on player-name spelling — the sheet
+writes "Harrison Petty" where the datathon data says "Harry Petty". Fixed
+2026-09-22 with a shared alias table (`R/name_aliases.R`); the placings did not
+move and the gap to the best entrant is **0.02194**, essentially unchanged.
+
+Our MAE rank (19th of 23) is far worse than our RMSE rank, which is the first
+clue to §2.
 
 **The model called the winner.** Daicos was our favourite before a vote was read
 (97.9%) and never fell below 98% during the count.
@@ -82,7 +89,7 @@ doubled — POSTMORTEM-2025 §5a and §5p). Anything below it is not a result.
 | Selection on mlogloss not RMSE | Already fixed pre-season, both axes | −0.0004, inside noise |
 | Sharpening and defender damping together | best honest combination | **+0.00094** |
 
-Against a **0.0222** gap to `jt`, the best honestly-fitted combination of all of
+Against a **0.0219** gap to `jt`, the best honestly-fitted combination of all of
 them is 0.00094 — **4%**. The hindsight ceiling, choosing every parameter
 knowing the answer, is about 0.003, or 14%.
 
