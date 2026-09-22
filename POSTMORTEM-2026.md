@@ -277,9 +277,10 @@ arithmetic rather than as an estimate:
 | **0.730** | **0.27222** | **+0.02047** |
 
 **A second member of our current quality at ρ ≈ 0.73 would put us level with the
-best entrant.** Measured against real partners: blending 50/50 with `bg1`
-(RMSE 0.29368, barely better than ours) gains **+0.01404** — fifteen times
-everything in §3 combined.
+best entrant** — but see below: that combination is off the frontier anyone has
+actually reached. Blending 50/50 with `bg1` (ρ 0.820, RMSE 0.29108, essentially
+our quality) gains **+0.0126**, which is fifteen times everything in §3 combined
+and is an existence proof rather than an extrapolation.
 
 Two things that cut against a naive reading:
 
@@ -287,12 +288,41 @@ Two things that cut against a naive reading:
   `hs` (ρ 0.588) and `afl` (ρ 0.635), are weak enough that adding them makes the
   blend *worse* — by −0.00497 and **−0.01273**, the latter larger than anything
   §3 could win. Quality and decorrelation both have to be there.
-- **This is one season, and ρ = 0.73 is an extrapolation.** The formula is exact
-  and validated at ρ = 0.820 and ρ = 0.975, but there is no validation point
-  anywhere near 0.73 with a good-quality partner — the only low-ρ entrants on
-  hand are the two weak ones above. ρ = 0.975 between our own members is also
-  measured on 2026 alone. Confirm both on a held-out season before committing to
-  a build.
+### ρ = 0.975 is structural, confirmed 2026-09-22
+
+The 0.975 was measured on 2026 alone, so it was flagged as needing a held-out
+check. The twelve-season table (`analysis/harness/ensemble_own_members.csv`)
+settles it: error correlation is **0.9709 ± 0.0044** across 2015-2025, and
+2026's 0.975 is **0.93 standard deviations** from that mean.
+
+What makes this convincing rather than circular is that the *regime* changes
+completely across those rows and ρ does not. On training seasons XGBoost beats
+the GAM by 0.058 RMSE; on 2026, the season it never saw, they are level
+(−0.001). Relative member quality swings enormously, and the error correlation
+stays at 0.97. It is a property of two model families built on the same
+features, not of how they were fitted.
+
+### But ρ ≈ 0.73 at our quality is off the observed frontier
+
+The 21 independent entrants are a natural experiment in how much decorrelation
+is actually available, and the answer is discouraging:
+
+**Correlation between an entrant's ρ-to-us and its own RMSE: −0.829
+(p < 0.0001).** The more decorrelated a model is from ours, the worse it tends
+to be. Six entrants sit at ρ ≤ 0.73; their RMSEs run 0.327 to 0.384 against our
+0.292, and most of them make the blend *worse*.
+
+So "a second member as good as ours at ρ = 0.73" is not something any of 21
+modellers achieved. The arithmetic in the table above is right; the input is
+not available.
+
+**What is demonstrably achievable is ρ ≈ 0.82 at our quality**, because `bg1`
+is exactly that — ρ 0.820, RMSE 0.29108 against our 0.29182 — an existence
+proof rather than an extrapolation. Blending with it gains **+0.0126**, taking
+us to roughly 0.2792 and third place rather than first.
+
+That is still fifteen times everything in §3 combined, and it remains the
+programme. The target is just 0.82, not 0.73.
 
 So the 2027 programme is not another feature or another calibration knob. It is
 **a second member that is wrong in different places** — a different model class

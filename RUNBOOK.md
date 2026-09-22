@@ -17,9 +17,12 @@ the 2027 queue. Headlines:
 - Four theories for closing it were tested and are worth **+0.00094 combined**
   against a 0.0219 gap. Do not re-open them; §3 says why each is dead.
 - The one large lever: our XGBoost and GAM have an error correlation of
-  **0.975**, so blending them buys almost nothing. A second member of the same
-  quality at correlation **0.73** would put us level with the best entrant,
-  worth about **+0.020**. See §5.
+  **0.975** (confirmed structural — 0.9709 ± 0.0044 across eleven other
+  seasons), so blending them buys almost nothing. Build a second member at
+  correlation **0.82** and our own quality, worth about **+0.0126**. Not 0.73:
+  across 21 entrants, ρ-to-us and their own RMSE correlate −0.829, so the
+  decorrelated models are all weak. `bg1` proves 0.82 at our quality exists.
+  See §5.
 
 **Live count tooling, should you want it next September:**
 `analysis/live_count.R` pulls the AFL vote feed during the count and
