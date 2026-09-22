@@ -1,6 +1,46 @@
 # Deadline-day runbook — Brownlow Datathon 2026
 
-## 21 September (count night) — start here
+## AFTER THE COUNT — start here (22 September 2026)
+
+**The count is over and the datathon is scored. Nick Daicos won with 47 votes**
+from Bailey Smith 36 and Marcus Bontempelli 34. We placed **7th of 23** at
+**0.29467 RMSE**. Everything below this section is pre-count and historical;
+read it for reference material, not for state.
+
+**Read `POSTMORTEM-2026.md` first** — it is the analysis of the result and §5 is
+the 2027 queue. Headlines:
+
+- We pick the best-on-ground as often as the best entrant (72.0% vs 72.9%) but
+  stake 2.04 expected votes on him against their 2.30. The gap is
+  **discrimination, not calibration**.
+- Four theories for closing it were tested and are worth **+0.00094 combined**
+  against a 0.0222 gap. Do not re-open them; §3 says why each is dead.
+- The one large lever: our XGBoost and GAM have an error correlation of
+  **0.975**, so blending them buys almost nothing. A second member of the same
+  quality at correlation **0.73** would put us level with the best entrant,
+  worth about **+0.020**. See §5.
+
+**Live count tooling, should you want it next September:**
+`analysis/live_count.R` pulls the AFL vote feed during the count and
+re-simulates only the unread matches; `analysis/live_refresh.ps1` drives it and
+rebuilds the artifact page. Feed details and its traps are in the memory note
+`afl-live-awards-feed` — most importantly it **503s a real browser but serves
+curl from any origin**, so the page cannot fetch it itself.
+
+**Not backed up:** `results/live/` holds 37 JSON snapshots of the feed taken
+through the count, the only replay of a live count we have. It is gitignored and
+exists on this machine only. Worth a piggyback release before it is lost.
+
+**One open decision carried over, and it is now cheap to settle.** The
+match-relative composites (POSTMORTEM-2025 §5o) were adopted on reasoning rather
+than evidence — end-to-end gain 0.00010 against the 0.00041 the harness
+suggested — and kept on a 2026 shift-robustness argument. That argument can now
+be checked: 2026 is a clean out-of-sample season with real votes, which did not
+exist when the decision was made. Reverting is one line in `02` plus a chain
+rerun. The full note is under the superseded section below; it is repeated here
+so it is not lost, since everything else down there is genuinely finished.
+
+## 21 September (count night) — pre-count reference
 
 - **Submission SENT 20 Sep** (Pete emailed the CSV to datathon@betfair.com.au; MS To-Do item closed). Nothing further to do for the datathon until results.
 
@@ -35,9 +75,12 @@
   list and are one correlated ruck opinion; ruck calibration 2019-25 checks out
   (actual/pred 0.93-1.11) so it is a real view, size it as one bet.
 
-## Next session starts here
+## Next session starts here — SUPERSEDED, see the post-count section at the top
 
-**State as of 12 September 2026.** The 2026 submission is built, correct, and
+**State as of 12 September 2026, before the count.** Kept for its detail on how
+the submission was built; for current state read POSTMORTEM-2026.md.
+
+**Original note follows.** The 2026 submission is built, correct, and
 merged (`main` at v0.2.7, `dev` fully merged, tree clean). Registered as
 **InTheGame** (Discord `random_effects153`). Everything below is either done,
 queued, or explicitly left for Pete.

@@ -6,7 +6,30 @@ which lives almost entirely in rows the competition metric barely weighs. A
 change can be right for one and irrelevant to the other, and this session has
 already produced two such cases.
 
-Status as of 2026-09-01.
+Status as of 2026-09-01, with a post-count update below.
+
+---
+
+## Update, 2026-09-22 — what the count settled
+
+The 2026 count has run. Two items in this document are now closed:
+
+- **§1 in-count momentum updating: BUILT, MEASURED, AND DELIBERATELY OFF.**
+  The persistence signal is real (`analysis/overperformance_persistence.R`,
+  pooled t = 4.78) but applying it made weighted top-20 log-loss **worse in 6 of
+  9 seasons, mean −0.023** (`analysis/harness/in_count_update_value.csv`). The
+  live tracker uses raw model probabilities for unread matches and the tilt is
+  not applied. Do not re-open it without a different mechanism; the idea is
+  sound and the weight is simply too small to pay for its variance.
+- **Live in-count simulation now exists**, which §1 assumed would need building:
+  `analysis/live_count.R` treats read-out matches as facts and re-simulates only
+  the unread ones, driven by `analysis/live_refresh.ps1`. The AFL feed and its
+  traps are in the memory note `afl-live-awards-feed`.
+
+For the modelling workstream the successor document is **POSTMORTEM-2026.md**,
+whose §5 carries the 2027 queue. The short version: the gap to the best entrant
+is discrimination, not calibration, and the single large lever is that our two
+ensemble members have an error correlation of 0.975.
 
 ---
 

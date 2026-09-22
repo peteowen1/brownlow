@@ -122,6 +122,8 @@ own <- ep[!is.na(act), {
     blend_gain = round(min(sqrt(mean(ex^2)), sqrt(mean(eg^2))) - sqrt(mean((ens - act)^2)), 5))
 }, by = season][order(season)]
 print(own)
+# The 0.975 in this table is POSTMORTEM Sec 5's headline, so it gets a file.
+fwrite(own, "analysis/harness/ensemble_own_members.csv")
 stopifnot("2026 ensemble RMSE does not match the known 0.29140" =
             abs(own[season == 2026, ens_rmse] - 0.29140) < 5e-5)
 cat("\nNOTE on reading this table: 2015-2025 are seasons the XGBoost was FITTED on,\n")
