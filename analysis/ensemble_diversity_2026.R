@@ -25,7 +25,7 @@
 suppressMessages({ library(data.table) })
 
 sh <- fread(sprintf("https://docs.google.com/spreadsheets/d/%s/export?format=csv",
-                    "1aVDy2j9ljjIjOmXjRAtKJpznM7l5IVxs_sxuciHbxOw"), skip = 3)
+                    "1aVDy2j9ljjIjOmXjRAtKJpznM7l5IVxs_sxuciHbxOw"), skip = "matchId")   # the header row, found by content: the sheet gained a summary row above it after 2026-09-21
 pm <- fread("results/markets/postmortem_2026_rows.csv",
             select = c("player_name","team","round","pred","actual"))
 sq <- function(x) tolower(gsub("[^a-z]", "", tolower(x)))

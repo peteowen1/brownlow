@@ -25,7 +25,7 @@
 #'   values are OUR squashed spelling.
 #' @export
 player_name_aliases <- function() {
-  c(leonardolombard   = "leolombard",
+  a <- c(leonardolombard   = "leolombard",
     harrisonpetty     = "harrypetty",
     baileyjwilliams   = "baileywilliams",
     callummbrown      = "callumbrown",
@@ -53,6 +53,10 @@ player_name_aliases <- function() {
     joshjkennedy      = "joshkennedy",     # West Coast
     joshpkennedy      = "joshkennedy",     # Sydney
     joshuadraper      = "joshdraper")
+  # A repeated key would silently resolve to its first value under name lookup.
+  if (anyDuplicated(names(a)))
+    stop("duplicate alias key(s): ", paste(names(a)[duplicated(names(a))], collapse = ", "))
+  a
 }
 
 #' Squash a Player Name for Joining

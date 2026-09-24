@@ -43,7 +43,8 @@ pull <- function(yr) {
   if (!length(f$leaderboard)) return(NULL)
   rbindlist(lapply(f$leaderboard, function(p) {
     rr <- p$roundByRoundVotes; if (!length(rr)) return(NULL)
-    data.table(season = yr, sq = to_our_name(paste(p$player$givenName, p$player$surname)),
+    data.table(season = yr, afl_name = paste(p$player$givenName, p$player$surname),
+               sq = to_our_name(paste(p$player$givenName, p$player$surname)),
                team = unname(TEAM[p$team$teamName]),
                match_round = vapply(rr, function(x) as.integer(x$roundNumber), 1L),
                feed = as.numeric(vapply(rr, function(x) as.integer(x$votes), 1L))) }))
@@ -55,6 +56,16 @@ cat(sprintf("feed returned %d season(s): %s\n", length(got), paste(got, collapse
 cat(sprintf("missing from the feed (not audited): %s\n",
             paste(setdiff(seasons, got), collapse = ", ")))
 
+# Both sides are summed by squashed name below, so two different club-mates who
+# squash alike would have their votes pooled and could cancel into "agreement".
+# live_count.R and live_rmse.R guard their joins the same way.
+raw[, player_name := paste(player_first_name, player_last_name)]
+clash_ours <- raw[season %in% got, .(n = uniqueN(player_name)), by = .(season, sq, team)][n > 1]
+clash_feed <- fd[, .(n = uniqueN(afl_name)), by = .(season, sq, team)][n > 1]
+if (nrow(clash_ours) || nrow(clash_feed)) {
+  print(rbind(clash_ours[, src := "datathon"], clash_feed[, src := "feed"]))
+  stop("two different players share a squashed name within a club-season; the audit would pool their votes")
+}
 ours <- raw[season %in% got, .(stored = sum(stored)), by = .(season, match_round, sq, team)]
 cmp <- merge(ours, fd[, .(feed = sum(feed)), by = .(season, match_round, sq, team)],
              by = c("season","match_round","sq","team"), all = TRUE)

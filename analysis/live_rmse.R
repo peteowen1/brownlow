@@ -19,7 +19,7 @@ OURS  <- "submissions/Brownlow_Medal_Datathon_2026_Submission_Form_V2_InTheGame.
 
 # ---- the prediction sheet ----------------------------------------------------
 url <- sprintf("https://docs.google.com/spreadsheets/d/%s/export?format=csv", SHEET)
-sh <- fread(url, skip = 3)
+sh <- fread(url, skip = "matchId")   # the header row, found by content: the sheet gained a summary row above it after 2026-09-21
 stopifnot(nrow(sh) == 9522, all(c("matchId","playerId","playerName","rd","Actual") %in% names(sh)))
 models <- setdiff(names(sh), c("matchId","rd","teamAbbreviation","playerId","playerName","gameRank","Actual"))
 cat(sprintf("sheet: %d rows, %d models (%s)\n", nrow(sh), length(models), paste(models, collapse = ", ")))

@@ -18,7 +18,7 @@ squash <- function(x) tolower(gsub("[^a-z]", "", tolower(x)))
 
 # ---- 1. which names fail to join, and what does the sheet call them? ---------
 sh <- fread(sprintf("https://docs.google.com/spreadsheets/d/%s/export?format=csv",
-                    "1aVDy2j9ljjIjOmXjRAtKJpznM7l5IVxs_sxuciHbxOw"), skip = 3)
+                    "1aVDy2j9ljjIjOmXjRAtKJpznM7l5IVxs_sxuciHbxOw"), skip = "matchId")   # the header row, found by content: the sheet gained a summary row above it after 2026-09-21
 ours <- fread("submissions/Brownlow_Medal_Datathon_2026_Submission_Form_V2_InTheGame.csv")
 ABBR <- c("Adelaide"="ADEL","Brisbane"="BL","Carlton"="CARL","Collingwood"="COLL",
           "Essendon"="ESS","Fremantle"="FRE","Gold Coast"="GCFC","Geelong"="GEEL",
