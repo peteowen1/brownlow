@@ -13,20 +13,23 @@
 #
 # Run: powershell.exe -Command 'Rscript "analysis/live_rmse.R"'
 
-suppressMessages({ library(data.table); library(jsonlite) })
+suppressMessages({ library(data.table); library(jsonlite); devtools::load_all(quiet = TRUE) })
 SHEET <- "1aVDy2j9ljjIjOmXjRAtKJpznM7l5IVxs_sxuciHbxOw"
 OURS  <- "submissions/Brownlow_Medal_Datathon_2026_Submission_Form_V2_InTheGame.csv"
 
 # ---- the prediction sheet ----------------------------------------------------
 url <- sprintf("https://docs.google.com/spreadsheets/d/%s/export?format=csv", SHEET)
-sh <- fread(url, skip = 3)
+sh <- fread(url, skip = "matchId")   # the header row, found by content: the sheet gained a summary row above it after 2026-09-21
 stopifnot(nrow(sh) == 9522, all(c("matchId","playerId","playerName","rd","Actual") %in% names(sh)))
 models <- setdiff(names(sh), c("matchId","rd","teamAbbreviation","playerId","playerName","gameRank","Actual"))
 cat(sprintf("sheet: %d rows, %d models (%s)\n", nrow(sh), length(models), paste(models, collapse = ", ")))
 
 # ---- our own entry, joined by round and name ---------------------------------
 ours <- fread(OURS)
-squash <- function(x) tolower(gsub("[^a-z]", "", tolower(x)))
+# Shared alias table (R/name_aliases.R). The sheet spells players in full
+# ("Harrison Petty") where the datathon data uses short forms, which used to
+# drop 207 rows -- 2.2% -- from EVERY entrant's score, not just ours.
+squash <- squash_name
 ABBR <- c("Adelaide"="ADEL","Brisbane Lions"="BL","Carlton"="CARL","Collingwood"="COLL",
           "Essendon"="ESS","Fremantle"="FRE","Gold Coast"="GCFC","Geelong"="GEEL",
           "Greater Western Sydney"="GWS","Hawthorn"="HAW","Melbourne"="MELB",
@@ -35,7 +38,7 @@ ABBR <- c("Adelaide"="ADEL","Brisbane Lions"="BL","Carlton"="CARL","Collingwood"
 ours[, `:=`(sq = squash(paste(player_first_name, player_last_name)), rd = match_round,
             tm = unname(ABBR[player_team]))]
 stopifnot("unmapped team in our submission" = !anyNA(ours$tm))
-sh[, `:=`(sq = squash(playerName), tm = teamAbbreviation)]
+sh[, `:=`(sq = to_our_name(playerName), tm = teamAbbreviation)]
 # Team is in the key because two different Bailey Williamses play in the same
 # rounds; on name and round alone they collide and both get dropped, which would
 # score our entry on 144 fewer rows than everyone else's.

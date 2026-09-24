@@ -4,7 +4,8 @@
 
 **The count is over and the datathon is scored. Nick Daicos won with 47 votes**
 from Bailey Smith 36 and Marcus Bontempelli 34. We placed **7th of 23** at
-**0.29467 RMSE**. Everything below this section is pre-count and historical;
+**0.29182 RMSE** (0.29467 in the first write-up, on a row set narrowed by a
+name-join bug since fixed; the placing did not move). Everything below this section is pre-count and historical;
 read it for reference material, not for state.
 
 **Read `POSTMORTEM-2026.md` first** — it is the analysis of the result and §5 is
@@ -14,11 +15,14 @@ the 2027 queue. Headlines:
   stake 2.04 expected votes on him against their 2.30. The gap is
   **discrimination, not calibration**.
 - Four theories for closing it were tested and are worth **+0.00094 combined**
-  against a 0.0222 gap. Do not re-open them; §3 says why each is dead.
+  against a 0.0219 gap. Do not re-open them; §3 says why each is dead.
 - The one large lever: our XGBoost and GAM have an error correlation of
-  **0.975**, so blending them buys almost nothing. A second member of the same
-  quality at correlation **0.73** would put us level with the best entrant,
-  worth about **+0.020**. See §5.
+  **0.975** (confirmed structural — 0.9709 ± 0.0044 across eleven other
+  seasons), so blending them buys almost nothing. Build a second member at
+  correlation **0.82** and our own quality, worth about **+0.0126**. Not 0.73:
+  across 21 entrants, ρ-to-us and their own RMSE correlate −0.829, so the
+  decorrelated models are all weak. `bg1` proves 0.82 at our quality exists.
+  See §5.
 
 **Live count tooling, should you want it next September:**
 `analysis/live_count.R` pulls the AFL vote feed during the count and

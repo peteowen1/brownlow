@@ -67,7 +67,7 @@ TEAM <- c("Adelaide Crows"="Adelaide","Brisbane Lions"="Brisbane","Carlton"="Car
           "North Melbourne"="North Melbourne","Port Adelaide"="Port Adelaide","Richmond"="Richmond",
           "St Kilda"="St Kilda","Sydney Swans"="Sydney","West Coast Eagles"="West Coast",
           "Western Bulldogs"="Western Bulldogs")
-squash <- function(x) tolower(gsub("[^a-z]", "", tolower(x)))
+squash <- squash_name   # R/name_aliases.R
 votes[, team := unname(TEAM[afl_team])]
 if (anyNA(votes$team)) stop("unmapped AFL team: ", paste(unique(votes[is.na(team), afl_team]), collapse = ", "))
 
@@ -79,12 +79,10 @@ lookup <- unique(ep[, .(key, player_name, team, sq = squash(player_name))])
 # the fact. Assert the key is unique instead.
 stopifnot("two players share a squashed name within a team" =
             !anyDuplicated(lookup[, .(sq, team)]))
-# The AFL feed disambiguates the two Bailey Williamses with a middle initial the
-# datathon data does not carry; team still separates them, so drop the initial.
-ALIAS <- c(baileyjwilliams = "baileywilliams", harrisonpetty = "harrypetty",
-           matthewcarroll = "mattcarroll")
-votes[, sq := squash(afl_name)]
-votes[sq %in% names(ALIAS), sq := unname(ALIAS[sq])]
+# to_our_name() squashes the feed's spelling and applies the shared alias table
+# in one step (R/name_aliases.R). The feed uses full forms and middle initials
+# the datathon data does not carry; team separates the players who still collide.
+votes[, sq := to_our_name(afl_name)]
 votes <- merge(votes, lookup[, .(sq, team, key)], by = c("sq","team"), all.x = TRUE)
 lost <- votes[is.na(key)]
 # STOP rather than carry on. A name the feed spells differently to the datathon
@@ -93,11 +91,11 @@ lost <- votes[is.na(key)]
 # authoritative -- exactly what happened to Harrison/Harry Petty on count night.
 # Halting costs one refresh cycle and the page keeps serving its last correct
 # state, which is strictly better than replacing it with a wrong one. The fix is
-# always a one-line ALIAS entry, so the operator can clear it inside a cycle.
+# always a one-line entry in R/name_aliases.R, so it clears inside a cycle.
 if (nrow(lost)) {
   print(lost[, .(votes = sum(votes)), by = .(afl_name, afl_team)])
   stop(sprintf(paste0("%d vote(s) from %d unmatched player(s) would be dropped. ",
-                      "Add the spelling(s) above to ALIAS and rerun."),
+                      "Add the spelling(s) above to R/name_aliases.R and rerun."),
                sum(lost$votes), uniqueN(lost$afl_name)))
 }
 

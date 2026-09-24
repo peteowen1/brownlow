@@ -53,15 +53,15 @@ totals <- by_player(V); rownames(totals) <- keys
 pname <- sub("_[^_]+$", "", keys); pteam <- sub("^.*_", "", keys)
 
 # ---- name resolution ---------------------------------------------------------
-squash <- function(x) tolower(gsub("[^a-z]", "", tolower(x)))
-pkey <- squash(pname)
-# Sportsbet spelling -> (our name, team). Team disambiguates the two Bailey Williams
-# (Sportsbet calls the West Coast one "Bailey J. Williams").
-alias <- list(matthewcarroll = c("Matt Carroll", NA), harrisonpetty = c("Harry Petty", NA),
-              baileyjwilliams = c("Bailey Williams", "West Coast"), baileywilliams = c("Bailey Williams", "Western Bulldogs"))
+pkey <- squash_name(pname)
+# Spellings come from the shared alias table (R/name_aliases.R). The one thing
+# it cannot carry is a club: Sportsbet lists selections without one, and two
+# Bailey Williams squash to the same key, so the Sportsbet spelling picks the club.
+TEAM_HINT <- c(baileyjwilliams = "West Coast", baileywilliams = "Western Bulldogs")
 pid <- function(nm) {
-  k <- squash(nm); team <- NA
-  if (!is.null(alias[[k]])) { team <- alias[[k]][2]; k <- squash(alias[[k]][1]) }
+  raw_k <- squash_name(nm)
+  team <- if (raw_k %in% names(TEAM_HINT)) TEAM_HINT[[raw_k]] else NA
+  k <- to_our_name(nm)
   i <- which(pkey == k & (is.na(team) | pteam == team))
   if (length(i) == 1) return(i)
   if (length(i) > 1) { warning("ambiguous player: ", nm); return(NA_integer_) }
@@ -173,7 +173,7 @@ for (m in unique(L[grepl("^Brownlow Group", event), market_id])) { rows <- which
 for (m in unique(L[grepl(" Most Votes( - Without |$)", event) & !grepl("Nick Daicos \\(", event), market_id])) { rows <- which(L$market_id == m)
   ev <- L$event[rows[1]]; tname <- team_of(sub(" Most Votes.*$", "", ev)); members <- which(pteam == tname)
   ex <- if (grepl("Without", ev)) trimws(strsplit(sub("^.*Without ", "", ev), "/")[[1]]) else character()
-  for (x in ex) { ini <- substr(x, 1, 1); sur <- squash(sub("^[A-Z]\\.", "", x))
+  for (x in ex) { ini <- substr(x, 1, 1); sur <- squash_name(sub("^[A-Z]\\.", "", x))
     hit <- members[substr(pname[members], 1, 1) == ini & endsWith(pkey[members], sur)]
     if (length(hit) != 1) { warning("cannot resolve exclusion ", x, " in ", ev); hit <- integer() }
     members <- setdiff(members, hit) }

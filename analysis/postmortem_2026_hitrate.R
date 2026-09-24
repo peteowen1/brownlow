@@ -16,7 +16,7 @@
 #
 # Run: powershell.exe -Command 'Rscript "analysis/postmortem_2026_hitrate.R"'
 
-suppressMessages({ library(data.table) })
+suppressMessages({ library(data.table); devtools::load_all(quiet = TRUE) })
 ep <- fread("results/markets/postmortem_2026_rows.csv")   # written by postmortem_2026_misses.R
 stopifnot("run analysis/postmortem_2026_misses.R first" = nrow(ep) == 9522)
 
@@ -37,14 +37,14 @@ cat("The real variation is no larger than chance, so there is no round pattern t
 
 # ---- best-on-ground hit rate, ours against the community sheet ---------------
 sh <- fread(sprintf("https://docs.google.com/spreadsheets/d/%s/export?format=csv",
-                    "1aVDy2j9ljjIjOmXjRAtKJpznM7l5IVxs_sxuciHbxOw"), skip = 3)
-sq <- function(x) tolower(gsub("[^a-z]", "", tolower(x)))
+                    "1aVDy2j9ljjIjOmXjRAtKJpznM7l5IVxs_sxuciHbxOw"), skip = "matchId")   # the header row, found by content: the sheet gained a summary row above it after 2026-09-21
+sq <- squash_name   # R/name_aliases.R
 ABBR <- c("Adelaide"="ADEL","Brisbane"="BL","Carlton"="CARL","Collingwood"="COLL",
           "Essendon"="ESS","Fremantle"="FRE","Gold Coast"="GCFC","Geelong"="GEEL",
           "Greater Western Sydney"="GWS","Hawthorn"="HAW","Melbourne"="MELB",
           "North Melbourne"="NMFC","Port Adelaide"="PORT","Richmond"="RICH","St Kilda"="STK",
           "Sydney"="SYD","Western Bulldogs"="WB","West Coast"="WCE")
-sh[, k := paste(rd, sq(playerName), teamAbbreviation)]
+sh[, k := paste(rd, to_our_name(playerName), teamAbbreviation)]
 ep[, k := paste(round, sq(player_name), unname(ABBR[team]))]
 m <- merge(sh[, .(k, matchId, jt, consensus, espn)], ep[, .(k, pred, actual)], by = "k")
 stopifnot("join lost matches" = uniqueN(m$matchId) == 207)

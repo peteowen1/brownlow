@@ -13,7 +13,7 @@
 #
 # Run: powershell.exe -Command 'Rscript "analysis/postmortem_2026_misses.R"'
 
-suppressMessages({ library(data.table); library(jsonlite) })
+suppressMessages({ library(data.table); library(jsonlite); devtools::load_all(quiet = TRUE) })
 
 # ---- actual votes, straight from the concluded feed ---------------------------
 tok <- httr::content(httr::POST("https://api.afl.com.au/cfs/afl/WMCTok"))$token
@@ -50,14 +50,21 @@ TEAM <- c("Adelaide Crows"="Adelaide","Brisbane Lions"="Brisbane","Carlton"="Car
           "North Melbourne"="North Melbourne","Port Adelaide"="Port Adelaide","Richmond"="Richmond",
           "St Kilda"="St Kilda","Sydney Swans"="Sydney","West Coast Eagles"="West Coast",
           "Western Bulldogs"="Western Bulldogs")
-squash <- function(x) tolower(gsub("[^a-z]", "", tolower(x)))
-ALIAS <- c(baileyjwilliams = "baileywilliams", harrisonpetty = "harrypetty",
-           matthewcarroll = "mattcarroll")
-polled[, `:=`(team = unname(TEAM[afl_team]), sq = squash(afl_name))]
-polled[sq %in% names(ALIAS), sq := unname(ALIAS[sq])]
-ep[, sq := squash(player_name)]
+# The shared alias table (R/name_aliases.R), not a local partial list: a polled
+# player the feed spells differently would otherwise join to nothing, and the
+# coalesce below would record his votes as 0.
+polled[, `:=`(team = unname(TEAM[afl_team]), sq = to_our_name(afl_name))]
+stopifnot("an AFL club name is missing from TEAM" = !anyNA(polled$team))
+ep[, sq := squash_name(player_name)]
+stopifnot("two of our players share a squashed name within a team" =
+            ep[, uniqueN(player_name), by = .(sq, team)][, all(V1 == 1L)])
+n_ep <- nrow(ep)
 ep <- merge(ep, polled[, .(sq, team, round, votes)],
             by.x = c("sq","team","match_round"), by.y = c("sq","team","round"), all.x = TRUE)
+stopifnot("the votes join fanned out" = nrow(ep) == n_ep)
+lost <- polled[votes > 0][!ep, on = c(sq = "sq", team = "team", round = "match_round")]
+if (nrow(lost)) stop("polled players that matched no row of ours: ",
+                     paste(unique(lost$afl_name), collapse = ", "))
 ep[, actual := fifelse(is.na(votes), 0L, votes)]
 ep[, pred := ensemble_expected_votes]
 ep[, err := pred - actual]
@@ -71,7 +78,10 @@ cat(sprintf("  season total is 207 x 6 = 1242 votes   : %s (%d)\n",
 cat(sprintf("  our predictions also sum to about 1242 : %.1f\n", sum(ep$pred)))
 cat(sprintf("  Daicos polled 47, the winner           : %s\n",
             ep[player_name == "Nick Daicos", sum(actual)] == 47))
-cat(sprintf("  no row lost its actual in the join     : %s\n", !anyNA(ep$actual)))
+# Printed above for the log; enforced here, so a failed anchor stops the run
+# instead of scrolling past.
+stopifnot("a match does not allocate 6 votes" = all(ep[, sum(actual), by = match_id]$V1 == 6),
+          "the season total is not 207 x 6 = 1242" = sum(ep$actual) == 1242)
 cat(sprintf("\ncoverage: %d rows, %d players, %d matches, rounds %d-%d\n",
             nrow(ep), uniqueN(ep$player_name), uniqueN(ep$match_id),
             min(ep$match_round), max(ep$match_round)))
@@ -144,18 +154,25 @@ print(a5[order(-sse), .(grp, rows, pred = round(pred, 0), actual, diff, share_of
 
 # ---- B. head-to-head with the best real entrant -------------------------------
 sh <- fread(sprintf("https://docs.google.com/spreadsheets/d/%s/export?format=csv",
-                    "1aVDy2j9ljjIjOmXjRAtKJpznM7l5IVxs_sxuciHbxOw"), skip = 3)
+                    "1aVDy2j9ljjIjOmXjRAtKJpznM7l5IVxs_sxuciHbxOw"), skip = "matchId")   # the header row, found by content: the sheet gained a summary row above it after 2026-09-21
 ABBR <- c("Adelaide"="ADEL","Brisbane"="BL","Carlton"="CARL","Collingwood"="COLL",
           "Essendon"="ESS","Fremantle"="FRE","Gold Coast"="GCFC","Geelong"="GEEL",
           "Greater Western Sydney"="GWS","Hawthorn"="HAW","Melbourne"="MELB",
           "North Melbourne"="NMFC","Port Adelaide"="PORT","Richmond"="RICH","St Kilda"="STK",
           "Sydney"="SYD","Western Bulldogs"="WB","West Coast"="WCE")
-sh[, `:=`(sq = squash(playerName), tm = teamAbbreviation)]
+# The community sheet uses the same long forms as the AFL feed, so it goes
+# through the shared alias table too. Logged against the no-alias join so any
+# change to this section's numbers is visible, not silent.
+sh[, `:=`(sq = to_our_name(playerName), tm = teamAbbreviation)]
 ep[, tm := unname(ABBR[team])]
 stopifnot("unmapped team" = !anyNA(ep$tm))
 h2h <- merge(sh[, .(rd, sq, tm, jt, consensus)],
              ep[, .(rd = match_round, sq, tm, player_name, ours = pred, actual, grp)],
              by = c("rd","sq","tm"))
+n_raw <- nrow(merge(sh[, .(rd, sq = squash_name(playerName), tm)],
+                    ep[, .(rd = match_round, sq, tm)], by = c("rd","sq","tm")))
+cat(sprintf("\nhead-to-head rows joined: %d of %d sheet rows (%+d from the alias table)\n",
+            nrow(h2h), nrow(sh), nrow(h2h) - n_raw))
 h2h <- h2h[!is.na(jt) & !is.na(ours)]
 cat(sprintf("\n=== B. head-to-head with jt, the best real entrant ===\ncommon rows: %d of %d (%d votes)\n",
             nrow(h2h), nrow(ep), sum(h2h$actual)))
