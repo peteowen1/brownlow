@@ -3,6 +3,21 @@
 This file starts at 0.2.0. Earlier versions are documented in the commit
 history and in `POSTMORTEM-2025.md`.
 
+# brownlow 0.2.14
+
+* One canonical player-name alias table (`player_name_aliases()`,
+  `squash_name()`, `to_our_name()`), now used by every script that joins
+  against the AFL feed, the community sheet or Sportsbet; it errors on a
+  duplicate key.
+* `analysis/postmortem_2026_misses.R` enforces its anchors (6 votes per match,
+  1,242 for the season) and stops on a polled player that joins to nothing.
+  2026's stored rows were verified unchanged.
+* `analysis/audit_votes_vs_feed.R` refuses to pool two club-mates whose names
+  squash alike.
+* Scripts reading the community sheet find its header by content
+  (`skip = "matchId"`); a summary row added above it had broken `skip = 3`.
+* Five unreferenced root files moved to `archive/`.
+
 # brownlow 0.2.13
 
 * Post-count handover. `RUNBOOK.md` opens with current state instead of two
