@@ -103,6 +103,9 @@ load_features_for_prediction <- function(target_season, verbose = TRUE) {
         progress = FALSE
       )
     }, error = function(e) {
+      warning(sprintf(paste0("enhance_datathon_data failed (%s); falling back to the ",
+                             "basic dataset WITHOUT umpire and weather features"),
+                      conditionMessage(e)), call. = FALSE)
       load_datathon_data("data/brownlow_datathon_dataset.csv")
     })
     
@@ -254,7 +257,9 @@ load_season_data <- function(target_season, prediction_type = "historical", verb
       progress = FALSE
     )
   }, error = function(e) {
-    if (verbose) cat("Fallback to basic dataset...\n")
+    warning(sprintf(paste0("enhance_datathon_data failed (%s); falling back to the ",
+                           "basic dataset WITHOUT umpire and weather features"),
+                    conditionMessage(e)), call. = FALSE)
     load_datathon_data("data/brownlow_datathon_dataset.csv")
   })
   

@@ -634,7 +634,7 @@ optimize_match_votes <- function(match_data) {
   Amat <- matrix(1, nrow = n_players, ncol = 1)
   bvec <- 6
 
-  tryCatch({
+  optimized_votes <- tryCatch({
     solution <- quadprog::solve.QP(
       Dmat = Dmat,
       dvec = dvec,
@@ -652,12 +652,20 @@ optimize_match_votes <- function(match_data) {
       optimized_votes <- optimized_votes * 6 / current_sum
     }
 
+    optimized_votes
   }, error = function(e) {
-    # Fallback to proportional method if optimization fails
+    # Fallback to proportional method if optimization fails. The handler's
+    # value is the tryCatch result: assigning inside the handler only sets a
+    # local variable, which is how this fallback used to be lost.
+    warning(sprintf("optimize_match_votes: solve.QP failed (%s); using proportional fallback",
+                    conditionMessage(e)), call. = FALSE)
     match_total <- sum(raw_preds)
-    optimized_votes <- ifelse(match_total > 0,
-                              raw_preds * 6 / match_total,
-                              rep(6 / n_players, n_players))
+    # if/else, not ifelse(): ifelse() on a scalar condition returns one value
+    if (match_total > 0) {
+      raw_preds * 6 / match_total
+    } else {
+      rep(6 / n_players, n_players)
+    }
   })
 
   match_data$constrained_pred <- optimized_votes
