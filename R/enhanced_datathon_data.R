@@ -168,10 +168,8 @@ enhance_datathon_data <- function(file_path = "data/brownlow_datathon_dataset.cs
       }
 
     }, error = function(e) {
-      if (progress) {
-        cat(sprintf("ERROR: Error fetching umpire data: %s\n", e$message))
-        cat("INFO: Continuing without umpire data enhancement\n")
-      }
+      warning(sprintf("Error fetching umpire data: %s. Continuing WITHOUT umpire data enhancement.",
+                      conditionMessage(e)), call. = FALSE)
     })
   }
 
@@ -195,10 +193,8 @@ enhance_datathon_data <- function(file_path = "data/brownlow_datathon_dataset.cs
       }
 
     }, error = function(e) {
-      if (progress) {
-        cat(sprintf("ERROR: Error fetching weather data: %s\n", e$message))
-        cat("INFO: Continuing without weather data enhancement\n")
-      }
+      warning(sprintf("Error fetching weather data: %s. Continuing WITHOUT weather data enhancement.",
+                      conditionMessage(e)), call. = FALSE)
     })
   }
 

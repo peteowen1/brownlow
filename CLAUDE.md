@@ -29,7 +29,6 @@ source("10_submission_analysis.R")        # Analyses the Datathon submission
 ### Data
 - **Always start from** `enhance_datathon_data()` — cleanest dataset with actual votes
 - All columns must be **snake_case** — use `janitor::clean_names()`
-- Never edit NAMESPACE directly — roxygen2 generates it
 
 ### Modeling Philosophy
 **The datathon scores RMSE.** Verified 2026-09-02 against the 2025 and 2026
