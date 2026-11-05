@@ -45,7 +45,9 @@ Imports:
     tibble,
     quadprog,
     purrr,
-    rlang
+    rlang,
+    arrow,
+    piggyback
 Suggests:
     knitr,
     rmarkdown,
