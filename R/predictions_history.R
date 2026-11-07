@@ -21,6 +21,13 @@
 #' @param upload Logical. `FALSE` writes the file only (dry run).
 #' @param repo,tag GitHub repo and release tag to upload to.
 #'
+#' @details Nothing in this repo calls this function yet: there is no live
+#'   predictions publish step to hook it into (the predictions are not
+#'   published anywhere automatically, and the 2027 season has not started).
+#'   When one exists, call this right after the live upload succeeds, in its
+#'   own `tryCatch()` so a history failure cannot break the live publish.
+#'   Needs the suggested packages `arrow` and, when `upload = TRUE`, `piggyback`.
+#'
 #' @return The path of the parquet written (invisibly).
 #' @export
 publish_predictions_history <- function(predictions,
@@ -30,6 +37,8 @@ publish_predictions_history <- function(predictions,
                                         upload = TRUE,
                                         repo = "peteowen1/brownlow",
                                         tag = "predictions-history") {
+  rlang::check_installed("arrow", reason = "to write the predictions parquet")
+  if (upload) rlang::check_installed("piggyback", reason = "to upload to the release")
   required <- c("event", "market", "selection", "probability")
   missing_cols <- setdiff(required, names(predictions))
   if (length(missing_cols)) stop("predictions is missing column(s): ", paste(missing_cols, collapse = ", "))
@@ -51,8 +60,17 @@ publish_predictions_history <- function(predictions,
   if (file.exists(path)) stop(path, " already exists; a published file is never rewritten")
 
   if (upload) {
+    # A listing failure means the release contents are UNKNOWN, not empty:
+    # say so and stop, rather than skipping the no-overwrite check.
     existing <- tryCatch(piggyback::pb_list(repo = repo, tag = tag)$file_name,
-                         error = function(e) character())
+                         error = function(e) {
+                           message("Could not list release '", tag, "' on ", repo, ": ", conditionMessage(e))
+                           NULL
+                         })
+    if (is.null(existing)) {
+      stop("Cannot confirm ", file_name, " is absent from release ", tag,
+           " (listing failed); not publishing")
+    }
     if (file_name %in% existing) stop(file_name, " already exists on release ", tag)
   }
 

@@ -38,3 +38,11 @@ Writes `predictions_<YYYYMMDDTHHMMSSZ>.parquet` (UTC publish time, to the
 second) and uploads it to the `predictions-history` release. Refuses to
 overwrite: it errors if a file of that name exists locally or on the release.
 }
+\details{
+Nothing in this repo calls this function yet: there is no live
+  predictions publish step to hook it into (the predictions are not
+  published anywhere automatically, and the 2027 season has not started).
+  When one exists, call this right after the live upload succeeds, in its
+  own `tryCatch()` so a history failure cannot break the live publish.
+  Needs the suggested packages `arrow` and, when `upload = TRUE`, `piggyback`.
+}

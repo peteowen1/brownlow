@@ -25,3 +25,48 @@ test_that("publish_predictions_history rejects bad input", {
   expect_error(publish_predictions_history(ok, dir = d, upload = FALSE), "within")
   expect_false(dir.exists(d))
 })
+
+test_that("upload path uploads once, with overwrite = FALSE, and refuses existing files", {
+  skip_if_not_installed("arrow")
+  skip_if_not_installed("piggyback")
+  p <- data.frame(event = "e", market = "m", selection = "s", probability = 0.5)
+  uploaded <- list()
+  testthat::local_mocked_bindings(
+    pb_list = function(...) data.frame(file_name = "predictions_19700101T000000Z.parquet"),
+    pb_releases = function(...) data.frame(tag_name = "predictions-history"),
+    pb_upload = function(file, ..., overwrite) { uploaded[[length(uploaded) + 1]] <<- list(file = file, overwrite = overwrite); invisible(TRUE) },
+    .package = "piggyback"
+  )
+  f <- publish_predictions_history(p, dir = tempfile("hist"), upload = TRUE)
+  expect_length(uploaded, 1)
+  expect_equal(uploaded[[1]]$file, f)
+  expect_false(uploaded[[1]]$overwrite)
+})
+
+test_that("a name already on the release stops the publish before upload", {
+  skip_if_not_installed("arrow")
+  skip_if_not_installed("piggyback")
+  p <- data.frame(event = "e", market = "m", selection = "s", probability = 0.5)
+  testthat::local_mocked_bindings(
+    pb_list = function(...) data.frame(file_name = format(Sys.time() + 0:2, "predictions_%Y%m%dT%H%M%SZ.parquet", tz = "UTC")),
+    pb_upload = function(...) stop("should not upload"),
+    .package = "piggyback"
+  )
+  expect_error(publish_predictions_history(p, dir = tempfile("hist"), upload = TRUE), "already exists on release")
+})
+
+test_that("a failed release listing is reported and stops the publish", {
+  skip_if_not_installed("arrow")
+  skip_if_not_installed("piggyback")
+  p <- data.frame(event = "e", market = "m", selection = "s", probability = 0.5)
+  d <- tempfile("hist")
+  testthat::local_mocked_bindings(
+    pb_list = function(...) stop("rate limited"),
+    pb_upload = function(...) stop("should not upload"),
+    .package = "piggyback"
+  )
+  expect_message(
+    expect_error(publish_predictions_history(p, dir = d, upload = TRUE), "listing failed"),
+    "rate limited")
+  expect_false(dir.exists(d))
+})
