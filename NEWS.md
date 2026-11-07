@@ -1,4 +1,4 @@
-# brownlow (development version)
+# brownlow 0.2.15
 
 * `publish_predictions_history()` writes each publish of the predictions as a new
   `predictions_<YYYYMMDDTHHMMSSZ>.parquet` in the `predictions-history` release
