@@ -62,11 +62,23 @@ publish_predictions_history <- function(predictions,
   if (upload) {
     # A listing failure means the release contents are UNKNOWN, not empty:
     # say so and stop, rather than skipping the no-overwrite check.
-    existing <- tryCatch(piggyback::pb_list(repo = repo, tag = tag)$file_name,
+    # The first publish runs before the release exists, and listing a missing
+    # release fails; that case is "nothing published yet", not "unknown".
+    releases <- tryCatch(piggyback::pb_releases(repo = repo, verbose = FALSE)$tag_name,
                          error = function(e) {
-                           message("Could not list release '", tag, "' on ", repo, ": ", conditionMessage(e))
+                           message("Could not list releases on ", repo, ": ", conditionMessage(e))
                            NULL
                          })
+    if (is.null(releases)) {
+      stop("Cannot confirm ", file_name, " is absent from release ", tag,
+           " (listing failed); not publishing")
+    }
+    existing <- if (!tag %in% releases) character(0) else
+      tryCatch(piggyback::pb_list(repo = repo, tag = tag)$file_name,
+               error = function(e) {
+                 message("Could not list release '", tag, "' on ", repo, ": ", conditionMessage(e))
+                 NULL
+               })
     if (is.null(existing)) {
       stop("Cannot confirm ", file_name, " is absent from release ", tag,
            " (listing failed); not publishing")
@@ -78,7 +90,7 @@ publish_predictions_history <- function(predictions,
   arrow::write_parquet(predictions, path)
 
   if (upload) {
-    if (!tag %in% piggyback::pb_releases(repo = repo, verbose = FALSE)$tag_name) {
+    if (!tag %in% releases) {
       piggyback::pb_release_create(repo = repo, tag = tag, body = "Dated history of published predictions. Files are never overwritten.")
     }
     piggyback::pb_upload(path, repo = repo, tag = tag, overwrite = FALSE)

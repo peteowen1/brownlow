@@ -49,6 +49,7 @@ test_that("a name already on the release stops the publish before upload", {
   p <- data.frame(event = "e", market = "m", selection = "s", probability = 0.5)
   testthat::local_mocked_bindings(
     pb_list = function(...) data.frame(file_name = format(Sys.time() + 0:2, "predictions_%Y%m%dT%H%M%SZ.parquet", tz = "UTC")),
+    pb_releases = function(...) data.frame(tag_name = "predictions-history"),
     pb_upload = function(...) stop("should not upload"),
     .package = "piggyback"
   )
@@ -62,6 +63,7 @@ test_that("a failed release listing is reported and stops the publish", {
   d <- tempfile("hist")
   testthat::local_mocked_bindings(
     pb_list = function(...) stop("rate limited"),
+    pb_releases = function(...) data.frame(tag_name = "predictions-history"),
     pb_upload = function(...) stop("should not upload"),
     .package = "piggyback"
   )
@@ -69,4 +71,35 @@ test_that("a failed release listing is reported and stops the publish", {
     expect_error(publish_predictions_history(p, dir = d, upload = TRUE), "listing failed"),
     "rate limited")
   expect_false(dir.exists(d))
+})
+
+test_that("the first publish creates the release without listing it", {
+  skip_if_not_installed("arrow")
+  skip_if_not_installed("piggyback")
+  p <- data.frame(event = "e", market = "m", selection = "s", probability = 0.5)
+  created <- FALSE; uploaded <- 0L
+  testthat::local_mocked_bindings(
+    pb_releases = function(...) data.frame(tag_name = "some-other-release"),
+    pb_list = function(...) stop("listing a missing release must not happen"),
+    pb_release_create = function(...) { created <<- TRUE; invisible(TRUE) },
+    pb_upload = function(...) { uploaded <<- uploaded + 1L; invisible(TRUE) },
+    .package = "piggyback"
+  )
+  publish_predictions_history(p, dir = tempfile("hist"), upload = TRUE)
+  expect_true(created)
+  expect_equal(uploaded, 1L)
+})
+
+test_that("a failed releases listing stops the publish too", {
+  skip_if_not_installed("arrow")
+  skip_if_not_installed("piggyback")
+  p <- data.frame(event = "e", market = "m", selection = "s", probability = 0.5)
+  testthat::local_mocked_bindings(
+    pb_releases = function(...) stop("rate limited"),
+    pb_upload = function(...) stop("should not upload"),
+    .package = "piggyback"
+  )
+  expect_message(
+    expect_error(publish_predictions_history(p, dir = tempfile("hist"), upload = TRUE), "listing failed"),
+    "rate limited")
 })
